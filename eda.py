@@ -182,13 +182,16 @@ def _plot_temporal_heatmap(df: pl.DataFrame) -> None:
         .group_by(["weekday", "hour"])
         .agg(pl.len().alias("count"))
     )
-    # Pivot para matriz 7×24
+    # Pivot para matriz (até 7)×24 — dropna evita linhas espúrias de datas inválidas
+    day_names = {0: "Seg", 1: "Ter", 2: "Qua", 3: "Qui", 4: "Sex", 5: "Sab", 6: "Dom"}
     pivot = (
         heat.to_pandas()
+            .dropna(subset=["weekday"])
+            .astype({"weekday": int})
             .pivot(index="weekday", columns="hour", values="count")
             .fillna(0)
     )
-    pivot.index = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    pivot.index = [day_names.get(i, str(i)) for i in pivot.index]
     fig, ax = plt.subplots(figsize=(12, 4))
     sns.heatmap(pivot, cmap="YlOrRd", linewidths=0.3, ax=ax,
                 cbar_kws={"label": "Nº de patches"})
