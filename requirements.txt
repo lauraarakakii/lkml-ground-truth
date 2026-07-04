@@ -1,6 +1,0 @@
-polars
-matplotlib
-seaborn
-shap
-xgboost
-pyarrow
