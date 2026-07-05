@@ -11,4 +11,3 @@ the COPYING file in the top-level directory.
 """
 
 from .Repository import Repository, Commit
-from .Mbox import PatchMail, Mbox

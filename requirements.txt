@@ -1,0 +1,9 @@
+pygit2 
+fuzzywuzzy 
+python-Levenshtein 
+pandas 
+pyarrow
+GitPython
+tqdm
+polars
+dateparser

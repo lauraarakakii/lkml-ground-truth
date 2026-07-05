@@ -1,0 +1,67 @@
+# =============================================================================
+# Configuração do pipeline LKML5Ws + PaStA
+# =============================================================================
+# Edite os valores abaixo conforme seu ambiente. Não precisa mexer em nenhum
+# outro arquivo do projeto para ajustar performance, caminhos ou qual lista
+# processar.
+
+[paths]
+# Repositório git do Linux já clonado (precisa ser o kernel de verdade,
+# não o repositório do seu próprio projeto!)
+repo_path = "resources/linux/repo"
+
+# Pasta raiz do dataset, que contém as subpastas "list=<nome>/*.parquet"
+dataset_root = "/media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset"
+
+# Qual lista processar (bate com o nome depois de "list=" nas subpastas).
+# Exemplos: "netdev", "bpf", "arm-scmi", "linux-usb", etc.
+# Use "all" para processar TODAS as listas encontradas em dataset_root,
+# uma de cada vez, cada uma gerando seu próprio arquivo de saída.
+list_name = "netdev"
+
+# Onde salvar o resultado. "{list}" é substituído automaticamente pelo nome
+# da lista sendo processada, então cada lista gera seu próprio arquivo
+# (evita sobrescrever resultado de uma lista com o de outra).
+output_path = "output/matches_{list}.csv"
+
+# Cache do índice arquivo->commits (não depende da lista, é sobre o repo git;
+# construído uma vez só e reaproveitado entre listas diferentes)
+commit_index_cache = "commit_index_cache.pickle"
+
+
+[performance]
+# Quantidade de processos paralelos usados para comparar patches (a parte
+# de fuzzy-matching é a que mais consome CPU).
+#   0 = automático (usa todos os núcleos disponíveis menos 1)
+# Ajuste esse número para controlar quantos núcleos do servidor o projeto
+# vai usar -- por exemplo, se o servidor é compartilhado com outras cargas,
+# reduza esse valor para não competir por CPU.
+num_workers = 0
+
+# Se true, reconstrói o índice arquivo->commits do zero mesmo se já existir
+# um cache salvo (use isso se você reclonar/atualizar o repositório do linux)
+rebuild_index = false
+
+# Quantos patches cada worker processa por vez antes de pedir mais trabalho
+# (chunksize do multiprocessing.Pool.imap_unordered). Valores maiores reduzem
+# overhead de comunicação entre processos, mas atualizam o progresso com
+# menos frequência.
+chunksize = 50
+
+# A cada quantos patches processados imprime uma linha de progresso
+progress_every = 500
+
+
+[matching]
+# Janela de tempo (em dias) para procurar o commit correspondente a partir
+# da data de envio do e-mail
+days_before = 3
+days_after = 365
+
+# Thresholds do motor de comparação do PaStA (0.0 a 1.0)
+autoaccept = 0.8
+interactive = 0.5
+diff_lines_ratio = 0.4
+heading = 0.7
+filename = 0.7
+message_diff_weight = 0.5
