@@ -20,8 +20,8 @@ from logging import getLogger
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
-from .MessageDiff import MessageDiff, Signature
-from ..Util import fix_encoding, get_commit_hash_range,\
+from .message_diff import MessageDiff, Signature
+from ..util import fix_encoding, get_commit_hash_range,\
                    pygit2_signature_to_datetime
 
 log = getLogger(__name__[-15:])
@@ -35,7 +35,7 @@ mainline_regex = {
     'git': re.compile(r'^v\d+\.\d+.*$'),
     'jailhouse': re.compile(r'^v.*$'),
     'linux': re.compile(r'^v(\d+\.\d+|2\.6\.\d+)(-rc\d+)?$'),
-    'openembedded': re.compile('^(\d{4}-\d+)(\.\d+)?(-[a-z]+)$'),
+    'openembedded': re.compile(r'^(\d{4}-\d+)(\.\d+)?(-[a-z]+)$'),
     'qemu': re.compile(r'^v.*$'),
     'u-boot': re.compile(r'^v201.*$'),
     'xen': re.compile(r'^(RELEASE-)?\d+\.\d+\.0.*$'),

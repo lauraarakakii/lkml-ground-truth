@@ -12,8 +12,8 @@ the COPYING file in the top-level directory.
 import re
 from collections import defaultdict
 
-from .Patch import Diff
-from ..Util import replace_umlauts
+from .patch import Diff
+from ..util import replace_umlauts
 
 
 class Signature:
