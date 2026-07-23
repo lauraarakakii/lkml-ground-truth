@@ -1,8 +1,26 @@
+# Python
 __pycache__/
 *.pkl
+*.egg-info/
+dist/
+
+# Ferramentas (uv, nox, ruff, pytest)
+.venv/
+.nox/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Saídas do pipeline e caches locais
+output/
+commit_index_cache.pickle
+config.toml
+log
+
+# Editor / SO
 .Rhistory
 .Rproj.user
 Pipfile.lock
 R/R.Rproj
 R/.RData
-log

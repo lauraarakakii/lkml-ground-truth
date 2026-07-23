@@ -5,9 +5,32 @@
 # outro arquivo do projeto para ajustar performance, caminhos ou qual lista
 # processar.
 
+[repo]
+# Clonagem automática do repositório do kernel (opcional). Desligada por
+# padrão: se você já tem um clone pronto em outro lugar, deixe
+# auto_clone = false e só aponte "paths.repo_path" pra ele.
+#
+# Se ligar, o pipeline (ou "make repo" / "lkml-ground-truth clone-repo")
+# clona sozinho para "paths.repo_path" caso ele ainda não exista.
+auto_clone = false
+
+# De onde clonar (o mirror oficial do Linus no kernel.org, por padrão).
+clone_url = "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
+
+# Opcional: limita o clone a partir dessa data (formato "YYYY-MM-DD"),
+# usando "git clone --shallow-since". Deixe vazio ("") para clonar o
+# histórico completo do kernel (décadas, dezenas de GB).
+# Útil quando você só precisa casar patches de um período recente: um
+# clone raso é muito mais rápido e ocupa bem menos disco. Só tome cuidado
+# pra "since" cobrir toda a janela de tempo que "matching.days_before" /
+# "matching.days_after" pode precisar buscar candidatos.
+since = ""
+
+
 [paths]
-# Repositório git do Linux já clonado (precisa ser o kernel de verdade,
-# não o repositório do seu próprio projeto!)
+# Repositório git do Linux (se "repo.auto_clone" estiver ligado e o
+# caminho abaixo não existir ainda, ele é clonado automaticamente aqui;
+# senão, precisa ser um clone real do kernel já feito por você).
 repo_path = "resources/linux/repo"
 
 # Pasta raiz do dataset, que contém as subpastas "list=<nome>/*.parquet"

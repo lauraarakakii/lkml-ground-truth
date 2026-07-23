@@ -1,0 +1,48 @@
+[project]
+name = "lkml-ground-truth"
+version = "0.1.0"
+description = "Ground truth de patch->commit para a LKML, casando e-mails do MailingListsHeritage com o repositório git do Linux via motor de comparação do PaStA."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = [
+    "polars~=1.42.0",
+    "pyarrow~=19.0",
+    "pandas~=2.2",
+    "pygit2~=1.15",
+    "GitPython~=3.1",
+    "fuzzywuzzy~=0.18.0",
+    "python-Levenshtein~=0.26",
+    "tqdm~=4.67",
+    "dateparser~=1.2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff~=0.8.0",
+    "pytest~=8.3",
+    "pytest-cov~=6.0",
+    "nox~=2024.10.9",
+]
+
+[project.scripts]
+lkml-ground-truth = "lkml_ground_truth.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lkml_ground_truth"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Módulo vendorizado: mantém o estilo original do PaStA (import * etc.).
+extend-exclude = ["src/lkml_ground_truth/pasta"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -17,7 +17,7 @@ from fuzzywuzzy import fuzz
 from multiprocessing import Pool, cpu_count
 from statistics import mean
 
-from .Util import *
+from .util import *
 
 log = getLogger(__name__[-15:])
 
