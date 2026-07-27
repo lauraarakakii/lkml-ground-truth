@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim
 
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -14,18 +14,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
-ENV UV_NO_CACHE=1
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
 WORKDIR /app
-
-RUN --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project
-
 COPY . .
 
-RUN uv sync --locked
+# Usa uv.lock se ele já existir no repo (build reprodutível, é o caso
+# normal); se não existir por algum motivo, uv gera um na hora -- essa
+# imagem de conveniência não deve travar por causa disso.
+RUN uv sync
 
 ENV PATH="/opt/venv/bin:$PATH"
 

@@ -6,7 +6,6 @@ CONFIG ?= config.toml
 # containers.mk do MailingListsHeritage
 CONTAINER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 IMAGE := lkml-ground-truth
-IMAGE_EXISTS := $(shell $(CONTAINER) image inspect $(IMAGE) >/dev/null 2>&1 && echo yes || echo no)
 
 .PHONY: all
 all: run
@@ -21,6 +20,21 @@ config:
 		echo "==> $(CONFIG) já existe, nada a fazer."; \
 	fi
 
+# Alvo interno (não chame direto): garante que a imagem exista antes de
+# qualquer target que rode via container, construindo-a se necessário.
+# Reavaliado a cada chamada (não em tempo de parse do Makefile), então
+# pega builds feitos manualmente entre uma invocação e outra.
+.PHONY: _ensure-image
+_ensure-image:
+	@if [ -z "$(CONTAINER)" ]; then \
+		echo "==> Nenhum runtime de container (docker/podman) encontrado no PATH."; \
+		exit 1; \
+	fi; \
+	if ! $(CONTAINER) image inspect $(IMAGE) >/dev/null 2>&1; then \
+		echo "==> Image $(IMAGE) not found, building..."; \
+		$(MAKE) rebuild; \
+	fi
+
 .PHONY: repo
 repo:
 	@if [ ! -f "$(CONFIG)" ]; then \
@@ -31,8 +45,11 @@ repo:
 	echo "    tempo dependendo de 'repo.since' em $(CONFIG) -- rode em background"; \
 	echo "    se preferir: nohup make repo &)..."; \
 	if command -v uv >/dev/null 2>&1; then \
+		echo "==> Found uv toolchain, running natively..."; \
 		uv run lkml-ground-truth --config $(CONFIG) clone-repo --force; \
 	else \
+		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
+		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
 			-w /app \
@@ -51,10 +68,7 @@ run:
 		uv run lkml-ground-truth --config $(CONFIG); \
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
-		if [ "$(IMAGE_EXISTS)" = "no" ]; then \
-			echo "==> Image $(IMAGE) not found, building..."; \
-			$(MAKE) rebuild; \
-		fi; \
+		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
 			-w /app \
@@ -69,6 +83,7 @@ test:
 		nox; \
 	else \
 		echo "==> Python Testing toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
+		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm \
 			-v $(CURDIR):/app \
 			-w /app \
@@ -90,7 +105,7 @@ fmt:
 
 .PHONY: rebuild
 rebuild:
-	$(CONTAINER) build --build-arg USER_ID=$(shell id -u) --build-arg GROUP_ID=$(shell id -g) -t $(IMAGE) -f Containerfile .
+	$(CONTAINER) build --build-arg USER_ID=$(shell id -u) --build-arg GROUP_ID=$(shell id -g) -t $(IMAGE) -f Dockerfile .
 
 .PHONY: clean
 clean:
