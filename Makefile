@@ -22,8 +22,6 @@ config:
 
 # Alvo interno (não chame direto): garante que a imagem exista antes de
 # qualquer target que rode via container, construindo-a se necessário.
-# Reavaliado a cada chamada (não em tempo de parse do Makefile), então
-# pega builds feitos manualmente entre uma invocação e outra.
 .PHONY: _ensure-image
 _ensure-image:
 	@if [ -z "$(CONTAINER)" ]; then \
@@ -52,9 +50,11 @@ repo:
 		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
+			-v /resources/linux/repo:/app/resources/linux/repo \
+    			-v /media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset:/app/resources/dataset \
 			-w /app \
 			$(IMAGE) \
-			lkml-ground-truth --config $(CONFIG) clone-repo --force; \
+			--config $(CONFIG) clone-repo --force; \
 	fi
 
 .PHONY: run
@@ -71,9 +71,11 @@ run:
 		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
+		    	-v /resources/linux/repo:/app/resources/linux/repo \
+			-v /media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset:/app/resources/dataset \
 			-w /app \
 			$(IMAGE) \
-			lkml-ground-truth --config $(CONFIG); \
+			--config $(CONFIG); \
 	fi
 
 .PHONY: test
@@ -105,7 +107,11 @@ fmt:
 
 .PHONY: rebuild
 rebuild:
-	$(CONTAINER) build --build-arg USER_ID=$(shell id -u) --build-arg GROUP_ID=$(shell id -g) -t $(IMAGE) -f Dockerfile .
+	$(CONTAINER) build \
+		--build-arg USER_ID=$(shell id -u) \
+		--build-arg GROUP_ID=$(shell id -g) \
+		-t $(IMAGE) \
+		-f Dockerfile .
 
 .PHONY: clean
 clean:

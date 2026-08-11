@@ -58,7 +58,7 @@ def process_list(config: Config, list_name: str) -> None:
         logger.info("Nenhum resultado (nenhuma linha tinha diff utilizável).")
         return
 
-    out = pl.DataFrame(results)
+    out = pl.DataFrame(results, infer_schema_length=None)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     out.write_csv(output_path)
 
