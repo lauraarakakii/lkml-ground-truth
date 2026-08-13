@@ -52,13 +52,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Clona mesmo com auto_clone=false em config.toml (ignora o toggle).",
     )
     subparsers.add_parser( 
-        
         "enrich",
         help="Junta o CSV de matches de volta no dataset original " \
         "(left join por message_id) e grava um parquet enriquecido " \
         "em 'paths.enriched_root'. Rode depois de 'run'."
-    ),
-
+    )
+    
     return parser
 
 
