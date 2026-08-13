@@ -27,6 +27,8 @@ class Paths:
     output_path: str
     commit_index_cache: str
 
+    enriched_root: str = "output/enriched"
+
     def parquet_glob(self, list_name: str | None = None) -> str:
         """Glob para ler todos os ``.parquet`` de uma lista específica."""
         list_name = list_name or self.list_name
@@ -36,6 +38,11 @@ class Paths:
         """Caminho de saída com ``{list}`` substituído pelo nome da lista."""
         list_name = list_name or self.list_name
         return self.output_path.format(list=list_name)
+
+    def enriched_parquet_path(self, list_name: str | None = None) -> str:
+        """Caminho do parquet enriquecido com matches, pronto para análise."""
+        list_name = list_name or self.list_name
+        return str(Path(self.enriched_root) / f"list={list_name} / "data.parquet")    
 
     def available_lists(self) -> list[str]:
         """Nomes de lista disponíveis no dataset (subpastas ``list=<nome>``)."""

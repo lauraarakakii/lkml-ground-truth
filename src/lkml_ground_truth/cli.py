@@ -7,6 +7,7 @@ import dataclasses
 import logging
 
 from .config import DEFAULT_CONFIG_PATH, load_config
+from .enrich import run as run_enrich
 from .pipeline import run
 from .repo_setup import ensure_repo
 
@@ -50,6 +51,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Clona mesmo com auto_clone=false em config.toml (ignora o toggle).",
     )
+    subparsers.add_parser( 
+        
+        "enrich",
+        help="Junta o CSV de matches de volta no dataset original " \
+        "(left join por message_id) e grava um parquet enriquecido " \
+        "em 'patchs.enriched_root'. Rode depois de 'run'."
+    ),
 
     return parser
 
@@ -68,6 +76,10 @@ def main(argv: list[str] | None = None) -> None:
             # repositório já existir em repo_path.
             repo_config = dataclasses.replace(repo_config, auto_clone=True)
         ensure_repo(repo_config, config.paths.repo_path)
+        return
+
+    if command == "enrich":
+        run_enrich(config)
         return
 
     run(config)

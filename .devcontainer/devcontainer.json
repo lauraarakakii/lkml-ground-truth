@@ -1,0 +1,9 @@
+{
+    "name": "lkml-ground-truth Development Container",
+    "build": { 
+        "dockerfile": "./Containerfile",
+        "context": ".."
+    },
+    "customizations": {},
+    "postCreateCommand": ".devcontainer/post-create.sh"
+}

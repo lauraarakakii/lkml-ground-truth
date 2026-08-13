@@ -1,167 +1,157 @@
 # lkml-ground-truth
 
-Gera um *ground truth* patch → commit para mailing lists do kernel Linux:
-casa e-mails de patch (dataset no formato produzido pelo
-[MailingListsHeritage](https://github.com/) — parquet particionado por
-`list=<nome>/`) com os commits correspondentes no repositório git do
-Linux, reaproveitando o motor de comparação do
-[PaStA](https://github.com/lfd/PaStA) (Patch Stack Analysis).
+Builds a patch commit *ground truth* for Linux kernel mailing lists: matches patch emails (a dataset in the format produced by [MailinglistsHeritage](https://github.com/) - parquet partitioned by list=<name>/`) with the corresponding commits in the Linux git repository, reusing the comparison engine from [PaStA](https://github.com/lfd/PaStA) (Patch Stack Analysis).
 
-## Por que não `git log` por patch
+## Overview
 
-A abordagem ingênua — rodar `git log` uma vez para cada patch — significa
-centenas de milhares de subprocessos em datasets grandes, cada um pagando
-o custo de startup do git e varrendo o histórico inteiro. Isso é o que
-fazia o pipeline levar mais de 20h sem terminar uma única lista.
+The naive approach - running git log once per patch means hundreds of thousands of subprocesses on large datasets, each paying the git startup cost and scanning the whole history. That is what made the pipeline run for 20h+ without finishing a single list.
 
-Em vez disso, o projeto constrói um **índice arquivo → commits** com uma
-única passada (`git log --name-only`) sobre todo o histórico do
-repositório, cacheado em disco. A busca de candidatos por patch vira uma
-busca binária em memória (`bisect`), sem nenhum subprocess — cerca de
-1000x mais rápido por busca.
+instead, the project builds a *file → commits index* in a single pass (git log --name-only') over the entire repository history, cached to disk. Per-patch candidate lookup becomes an in-memory binary search (bisect), with no subprocess - roughly 1000x faster per lookup.
 
-## Estrutura
+## Prerequisites
 
-```
-lkml-ground-truth/
-├── pyproject.toml          ← dependências, versão, config do ruff/pytest
-├── example_config.toml     ← copie para config.toml e ajuste ao seu ambiente
-├── Makefile                ← run / test / lint / fmt / clean
-├── Containerfile            ← imagem para rodar sem instalar toolchain local
-├── noxfile.py               ← sessões `lint` e `tests` (usadas por CI e Makefile)
-├── src/lkml_ground_truth/
-│   ├── cli.py               ← ponto de entrada (`lkml-ground-truth`)
-│   ├── config.py            ← única fonte de configuração (lê config.toml)
-│   ├── commit_index.py      ← índice arquivo->commits (build/cache/busca)
-│   ├── repo_setup.py        ← clonagem opcional do repo do kernel
-│   ├── dataset_io.py        ← leitura tolerante a falhas dos parquet
-│   ├── engine.py            ← comparação patch<->commit (roda nos workers)
-│   ├── pipeline.py          ← orquestra dataset -> Pool -> CSV de saída
-│   └── pasta/                ← motor de comparação vendorizado do PaStA
-│       ├── patch_evaluation.py
-│       ├── util.py
-│       └── repository/       ← Diff, MessageDiff, Repository (pygit2)
-└── tests/                   ← testes unitários (config, índice de commits)
-```
+### Container Runtime (Required)
 
-Cada módulo tem uma única responsabilidade: `config.py` nunca sabe nada
-sobre parquet, `dataset_io.py` nunca sabe nada sobre git, `engine.py`
-nunca abre um Pool. `pipeline.py` é o único lugar que conhece todas as
-peças e as conecta.
+- Podman, or
+- Docker
 
-### O que é `pasta/`
+### Native Development (Optional) 
+- Python 3.12+
+- [uv] (https://docs.astral.sh/uv/) package manager
+- A clone of the Linux kernel repository (see below) - this can be done 
+  manually or automatically.
 
-É um subconjunto vendorizado do PaStA original (`pypasta`), mantendo os
-cabeçalhos de copyright/licença (GNU GPLv2, OTH Regensburg / Ralf
-Ramsauer). Só o necessário para comparar um patch com um commit
-candidato — não inclui `Clustering.py` nem `PatchStack.py`, que fazem
-parte de outro fluxo de trabalho do PaStA. Os nomes de arquivo foram
-normalizados para `snake_case` para ficar consistente com o resto do
-projeto; o conteúdo lógico não foi alterado.
+## Installation
 
-## Como usar
-
-Requer [uv](https://docs.astral.sh/uv/) e um clone do repositório do
-kernel Linux (não este projeto) — que pode ser feito manualmente ou
-automaticamente, veja abaixo.
+### Using Devbox (Recommended)
 
 ```bash
-# 1. Copie e ajuste a configuração
-make config              # copia example_config.toml -> config.toml
-$EDITOR config.toml       # ajuste repo_path, dataset_root, list_name...
-
-# 2. Rode o pipeline
-make run                  # usa uv se disponível, senão constrói/roda via container
-
-# ou diretamente:
-uv sync
-uv run lkml-ground-truth --config config.toml
+devbox shell
 ```
 
-### Clonar o repositório do kernel
+This sets up Python, uv, and all required dependencies automatically, and 
+registers the pre-commit hooks.
 
-Você tem duas opções, controladas por `[repo] auto_clone` em
-`config.toml`:
-
-- **Manual (padrão, `auto_clone = false`)** — como sempre foi: você
-  clona o kernel na mão (`git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git`)
-  e aponta `paths.repo_path` pra ele. Se o caminho não existir quando o
-  pipeline rodar, você recebe um erro explicando exatamente o que fazer.
-- **Automático (`auto_clone = true`)** — o pipeline clona sozinho para
-  `paths.repo_path`, caso ele ainda não exista, antes de começar a
-  processar. Rodar de novo depois é instantâneo: se o repo já existe,
-  o clone é pulado.
-
-Como o clone completo do kernel tem décadas de histórico (dezenas de
-GB), dá pra limitar a um período com `[repo] since = "2020-01-01"`
-(clone raso via `git clone --shallow-since`) — bem mais rápido e leve
-quando você só precisa casar patches recentes. Só preste atenção pra
-essa data cobrir toda a janela que `matching.days_before` /
-`matching.days_after` pode precisar (candidatos fora do histórico
-clonado simplesmente não são encontrados).
-
-Pra clonar separado, sem rodar o pipeline inteiro junto (por exemplo,
-deixar clonando em background enquanto ajusta o resto da config):
+### Manual Setup
 
 ```bash
-make repo                                   # clona mesmo com auto_clone=false
-# ou:
-uv run lkml-ground-truth clone-repo         # respeita auto_clone
-uv run lkml-ground-truth clone-repo --force  # ignora o toggle
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh
+
+# Install dependencies (from the committed uv.lock) uv sync --locked
+uv sync --locked
 ```
 
-`list_name = "all"` em `config.toml` processa todas as listas
-encontradas em `dataset_root`, uma de cada vez, cada uma gerando seu
-próprio `output/matches_<lista>.csv`.
-
-## Configuração (`config.toml`)
-
-Única fonte de configuração do projeto — não é necessário editar nenhum
-outro arquivo para ajustar caminhos, paralelismo ou thresholds:
-
-- **`[repo]`** — clonagem automática opcional do kernel (`auto_clone`),
-  URL de clone e, opcionalmente, um período (`since`) para um clone
-  raso. Ver [Clonar o repositório do kernel](#clonar-o-repositório-do-kernel).
-- **`[paths]`** — repositório git do Linux, raiz do dataset, lista a
-  processar, caminho de saída e cache do índice.
-- **`[performance]`** — número de processos paralelos, tamanho de chunk
-  do `multiprocessing.Pool`, frequência de log de progresso e se o
-  índice deve ser reconstruído do zero.
-- **`[matching]`** — janela de tempo (dias antes/depois do envio do
-  e-mail) para buscar candidatos, e os thresholds do motor de
-  comparação do PaStA (`autoaccept`, `interactive`, etc.).
-
-Veja `example_config.toml` para a referência completa, comentada.
-
-## Saída
-
-Um CSV por lista processada, com uma linha por e-mail de patch:
-
-| coluna               | descrição                                             |
-|----------------------|--------------------------------------------------------|
-| `message_id`         | Message-ID do e-mail                                    |
-| `best_commit`        | hash do commit com maior score, ou vazio se nenhum       |
-| `score`              | score combinado (mensagem + diff), 0.0–1.0               |
-| `is_match`           | `score >= matching.interactive`                          |
-| `is_confident_match` | `score >= matching.autoaccept`                           |
-| `error`              | mensagem de erro, se a linha falhou ao processar         |
-
-## Desenvolvimento
+## Usage
 
 ```bash
-uv sync --all-extras --dev
-make lint     # ruff check
-make fmt      # ruff format
-make test     # nox -> pytest com coverage
+# 1. Copy and adjust the configuration
+make config # copies example_config.toml -> config.toml
+$EDITOR config.toml # set repo_path, dataset root, list name...
+
+# 2. Run the pipeline make run
+make run # uses uv if available, otherwise builds/runs via container
+
+# or directly:
+uv run lkml ground-truth --config config.tomi
 ```
 
-Hooks de pre-commit (whitespace, TOML/YAML válido, ruff) estão em
-`.pre-commit-config.yaml`; rode `pre-commit install` uma vez para
-ativá-los localmente.
+### Cloning the kernel repository
 
-## Licença
+Two options, controlled by `[repo] auto_clone` in `config.toml`":
 
-O código próprio deste projeto segue a licença em `LICENSE`. O
-subpacote `src/lkml_ground_truth/pasta/` é vendorizado do PaStA e
-permanece sob GNU GPLv2, com atribuição original preservada em cada
-arquivo.
+- **Manual (default, auto_clone = false)** - you clone the kernel
+  yourself (git clone https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git)
+  and point `paths.repo_path` at it. If the path does not exist when the
+  pipeline runs, you get an error explaining exactly what to do.
+- **Automatic (`auto_clone = true`)** - the pipeline clones into 
+  `paths.repo_path` itself, if it does not exist yet, before processing.
+  Re-running afterwards is instant: if the repo already exists, the clone is 
+  skipped.
+
+Since a full kernel clone spans decades of history (tens of GB), you can limit it to a time window with `[repo] since = "2020-01-01"` (a shallow clone via `git clone --shallow-since`) - much faster and lighter when you only need to maich recent patches. Just make sure that date covers the whole window `matching.days before` / `matching.days_after` might need (candidates outside the cloned history simply are not found).
+
+To clone separately, without running the whole pipeline (e.g. leaving it cloning in the background while you adjust the rest of the config):
+
+```bash
+make repo # clones even with auto_clone = false
+# or
+uv run lkml-ground-truth clone-repo # respects auto_clone
+uv run lkml-ground-truth clone-repo --force # ignores the toggle
+```
+
+### Running in a container with external data
+
+When running via container (no local uv), the project directory is mounted at `/app`. To make an external dataset or kernel clone visible inside the container, pass extra bind mounts - they are mounted at the same path so absolute paths in `config.toml` stay valid:
+
+```bash
+make run DATASET_VOLUME=/data/mlh/dataset REPO_VOLUME=/data/linux/repo
+```
+
+## Configuration (`config.toml`)
+
+The single source of configuration for the project - no other file needs editing to adjust paths, parallelism or thresholds:
+
+- **`[repo]`** - optional automatic kernel cloning (`auto_clone`), clone URL
+  and, optionally, a time window (`since`) for a shallow clone.
+- **[paths]** - Linux git repository, dataset root, list to process, output path and index cache.
+- **[performance]** - number of parallel processes, `multiprocessing.Pool` chunk size, progress log frequency and whether the index should be rebuilt from scratch.
+- **[matching]** time window (days before/after the email date) to for candidates, and the PaStA comparison-engine thresholds (`autoaccept`, `interactive`, etc.)
+
+See `example_config.toml` for the full, commented reference.
+
+## Output
+
+One CSV per processed list, one row per patch email:
+
+| column                          | description               |
+|---------------------------------|---------------------------|
+| `message_id`                    | email Message-ID |
+| `best_commit`                   | highest-scoring commit hash, or empty if none |
+| `score`                         | combined score (message + diff), 0.0–1.0 |
+| `is match`                      | score >= matching.interactive |
+| `is_confident_match`            | score >= matching.autoaccept |
+| `error`                         | error message, if the row failed to process  |
+
+
+### Enriching the original dataset
+
+The CSV above is the ground-truth artifact. To fold those results **back into the mailing-list dataset**, run the `enrich` step after `run`:
+
+```bash
+uv run lkml-ground-truth enrich # left-joins matches onto the parquet
+```
+
+It reads the original parquet and the match CSV, left-joins them on `message_id`, and writes a new **enriched** parquet under
+
+`paths.enriched_root` (default `output/enriched/`), keeping the same
+
+`list=<name>`/ layout. Every original row is preserved - emails without a patch (never processed by the pipeline) simply get null match columns. The added columns are `best_commit`, `score`, `is_match` and `is_confident_match`. The original dataset and the CSV are left untouched.
+
+### What pasta/ is
+
+A vendored subset of the original PaStA (`pypasta`), keeping the copyright/license headers (GNU GPLv2, OTH Regensburg / Ralf Ramsauer). Only what is needed to compare a patch with a candidate commit - it does not include `Clustering.py` nor `PatchStack.py`, which belong to another PaStA workflow. File names were normalized to `snake_case` for consistency with the rest of the project; the logical content was not changed.
+
+## Development
+
+```bash
+uv sync --locked --all-extras --dev
+make lint # ruff check
+make fmt
+make test
+```
+
+Pre-commit hooks (whitespace, valid TOML/YAML/JSON, ruff, typos) live in `.pre-commit-config.yaml`; run `pre-commit install` (or `prek install`) once
+to enable them locally.
+
+## Container Build
+
+```bash
+make rebuild # builds the image from Containerfile
+```
+
+## License
+
+This project's own code follow the license in `LICENSE`. The
+`src/lkml_ground_truth/pasta/` subpackage is vendored from PaStA and remains
+under GNU GPLv2, with the original attribution preserved in each file

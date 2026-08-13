@@ -34,7 +34,7 @@ since = ""
 repo_path = "resources/linux/repo"
 
 # Pasta raiz do dataset, que contém as subpastas "list=<nome>/*.parquet"
-dataset_root = "/media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset"
+dataset_root = "/path/to/mlh/output/parser/dataset"
 
 # Qual lista processar (bate com o nome depois de "list=" nas subpastas).
 # Exemplos: "netdev", "bpf", "arm-scmi", "linux-usb", etc.

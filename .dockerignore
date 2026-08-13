@@ -1,0 +1,19 @@
+.git
+.venv
+.nox
+.ruff_cache
+.pytest_cache
+htmlcov
+.coverage
+__pycache__
+**/__pycache__
+*.pyc
+
+# Local pipeline state and outputs (see config.toml)
+config.toml
+output/
+resources/
+commit_index_cache.pickle
+*.pickle
+*.pkl
+log

@@ -1,0 +1,21 @@
+FROM python:3.12-slim-trixie
+
+ENV DEBIAN FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+        git \
+        libgit2-dev \
+        pkg-config\
+        build-essential \
+        make \
+        ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+# python uv toolchain
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# prek pre-commit framework
+COPY --from=ghcr.io/j178/prek: v0.4.0 /prek /usr/local/bin/prek
+
+WORKDIR /code
