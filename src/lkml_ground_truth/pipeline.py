@@ -77,7 +77,7 @@ def run(config: Config) -> None:
     logger.info(
         "Abrindo repositório e construindo/carregando índice: %s", config.paths.repo_path
     )
-    init_worker_globals(config)  # roda no processo principal ANTES do Pool (fork)
+    init_worker_globals(config)  
 
     list_name = config.paths.list_name
 

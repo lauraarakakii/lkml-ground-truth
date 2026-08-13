@@ -71,7 +71,7 @@ run:
 		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
-		    	-v /resources/linux/repo:/app/resources/linux/repo \
+		    -v /resources/linux/repo:/app/resources/linux/repo \
 			-v /media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset:/app/resources/dataset \
 			-w /app \
 			$(IMAGE) \
