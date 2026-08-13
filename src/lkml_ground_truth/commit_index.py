@@ -1,17 +1,4 @@
-"""Índice arquivo -> lista de commits que tocam esse arquivo.
-
-Isto substitui a estratégia antiga de rodar ``git log`` uma vez PRA CADA
-patch (o que, com centenas de milhares de patches, significa centenas de
-milhares de subprocessos, cada um recomeçando o custo de startup do git
-e varrendo o histórico -- é isso que fazia o pipeline levar 20h+ sem
-terminar uma lista).
-
-A ideia nova: percorre o histórico do repositório UMA ÚNICA VEZ
-(``git log --name-only``), constrói um índice em memória
-``{arquivo: [(timestamp, hash), ...]}`` ordenado por tempo, e cacheia em
-disco. A busca de candidatos por patch vira uma busca binária em memória
-(:mod:`bisect`), sem nenhum subprocess.
-"""
+"""Índice arquivo -> lista de commits que tocam esse arquivo."""
 
 from __future__ import annotations
 
