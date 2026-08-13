@@ -42,7 +42,7 @@ class Paths:
     def enriched_parquet_path(self, list_name: str | None = None) -> str:
         """Caminho do parquet enriquecido com matches, pronto para análise."""
         list_name = list_name or self.list_name
-        return str(Path(self.enriched_root) / f"list={list_name} / "data.parquet")    
+        return str(Path(self.enriched_root) / f"list={list_name}" / "data.parquet")    
 
     def available_lists(self) -> list[str]:
         """Nomes de lista disponíveis no dataset (subpastas ``list=<nome>``)."""

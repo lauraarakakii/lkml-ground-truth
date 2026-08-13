@@ -35,7 +35,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "run",
-        help="Roda o pipeline completo (padrão se nenhum subcomando for passado).",
+        help="Roda o pipeline completo (padrão se nenhum subcomando for passado)."
     )
 
     clone_parser = subparsers.add_parser(
@@ -56,7 +56,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "enrich",
         help="Junta o CSV de matches de volta no dataset original " \
         "(left join por message_id) e grava um parquet enriquecido " \
-        "em 'patchs.enriched_root'. Rode depois de 'run'."
+        "em 'paths.enriched_root'. Rode depois de 'run'."
     ),
 
     return parser

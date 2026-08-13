@@ -1,9 +1,4 @@
-"""Enriquecimento: junta o resultado do match de volta no dataset original.
-
-O pipeline (:mod: lkml_ground_truth.pipeline) produz um CSV de ground-truth por lista (uma lìnha por e-mail-com-patch). Este módulo faz o passo seguinte, opcional e independente: pega esse CSV e o parquet original do MailinglistsHeritage e escreve um dataset *enriquecido* -- o parquet original acrescido das colunas de match (best commit,score, is match, is_confident_match), unidas por message_id.
-
-É um left join a partir do parquet original: todas as linhas originais são preservadas, inclusive e-mails sem patch (que o pipeline nunca processa) -- essas ficam com as colunas de match nulas. O dataset original e o CSV não são tocados; a saída vai para um dataset novo em paths.enriched root, mantendo o layout list-<nome>/ para ser relido pelas mesmas ferramentas.
-"""
+"""Enriquecimento: junta o resultado do match de volta no dataset original."""
 
 from __future__ import annotations
 
@@ -31,7 +26,8 @@ def enrich_list(config: Config, list_name: str) -> None:
     if not matches_path.exists(): 
         raise FileNotFoundError( 
             f"CSV de matches não encontrado para a lista '{list_name}': "
-            f"{matches_path}. Rode o pipeline antes ('1kml-ground-truth run')."
+            f"{matches_path}. Rode o pipeline antes ('lkml-ground-truth run')."
+        )
 
     logger.info("Lendo dataset original: %s", glob_path)
     df = read_parquet_safe(glob_path)
