@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import glob as globmod
 import logging
-
+import pyarrow.parquet as pq
 import polars as pl
 
 logger = logging.getLogger(__name__)
@@ -28,13 +28,18 @@ def read_parquet_safe(path_or_glob: str) -> pl.DataFrame:
             type(exc).__name__,
         )
 
-    import pyarrow.parquet as pq
 
     files = (
         sorted(globmod.glob(path_or_glob))
         if any(c in path_or_glob for c in "*?[")
         else [path_or_glob]
     )
+
+    if not files:
+        raise FileNotFoundError(
+            f"Nenhum arquivo .parquet encontrado para: {path_or_glob!r}. "
+            "Verifique 'paths.dataset_root'/nome da lista no config.toml"
+        )
 
     parts = []
     for file in files:

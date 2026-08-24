@@ -7,6 +7,9 @@ CONFIG ?= config.toml
 CONTAINER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 IMAGE := lkml-ground-truth
 
+REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
+DATASET_VOLUME ?= $(CURDIR)/resources/dataset
+
 .PHONY: all
 all: run
 
@@ -50,8 +53,8 @@ repo:
 		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
-			-v /resources/linux/repo:/app/resources/linux/repo \
-    			-v /media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset:/app/resources/dataset \
+			-v $(REPO_VOLUME):/app/resources/linux/repo \
+    		-v $(DATASET_VOLUME):/app/resources/dataset \
 			-w /app \
 			$(IMAGE) \
 			--config $(CONFIG) clone-repo --force; \

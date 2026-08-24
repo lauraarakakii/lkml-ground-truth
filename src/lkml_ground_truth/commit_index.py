@@ -22,9 +22,15 @@ def _parse_git_log_dump(text: str) -> CommitIndex:
 
     for line in text.split("\n"):
         if line.startswith("\x01"):
-            commit_hash, ts = line[1:].split(" ")
+            parts = line[1:].split(" ", 1)
+            if len(parts) != 2 or not parts[1].strip().isdigit():
+                logger.debug("Cabeçalho de commit inesperado ignorado: %r", line)
+                continue
+            commit_hash, ts = parts[0], parts[1].strip()
             current_hash, current_ts = commit_hash, int(ts)
         elif line.strip():
+            if current_hash is None:
+                continue
             index[line.strip()].append((current_ts, current_hash))
 
     for file_entries in index.values():
@@ -70,13 +76,23 @@ def load_or_build_index(
 
     if not rebuild and cache_file.exists():
         logger.info("Carregando índice do cache: %s", cache_path)
-        with cache_file.open("rb") as f:
-            return pickle.load(f)
+        try:
+            with cache_file.open("rb") as f:
+                return pickle.load(f)
+        except (pickle.UnpicklingError, EOFError, ValueError) as exc:
+            logger.warning(
+                "Cache de índice corrompido (%s); reconstruindo: %s",
+                cache_path,
+                exc,
+            )
 
     index = build_commit_index(repo_path)
 
-    with cache_file.open("wb") as f:
+    cache_file.parent.mkdir(parent=True, exist_ok=True)
+    tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+    with tmp_file.open("wb") as f:
         pickle.dump(index, f)
+    tmp_file.replace(cache_file)
     logger.info("Índice salvo em cache: %s", cache_path)
 
     return index

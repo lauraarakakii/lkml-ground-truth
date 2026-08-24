@@ -47,10 +47,18 @@ class Paths:
     def available_lists(self) -> list[str]:
         """Nomes de lista disponíveis no dataset (subpastas ``list=<nome>``)."""
         root = Path(self.dataset_root)
-        return sorted(
+        if not root.is_dir():
+            raise FileNotFoundError(
+                f"dataset_root não encontrado ou não é um diretório: {root}. "
+                "Ajuste 'paths.dataset_root' no config.toml"
+            )
+        names = (
             p.name.split("=", 1)[1]
             for p in root.iterdir()
             if p.is_dir() and p.name.startswith("list=")
+        )
+        return sorted(
+            name for name in names if name 
         )
 
 
@@ -148,9 +156,24 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     # funcionando com auto_clone desligado (comportamento manual de sempre).
     repo_raw = {**_REPO_DEFAULTS, **raw.get("repo", {})}
 
-    return Config(
+    config = Config(
         paths=Paths(**raw["paths"]),
         performance=Performance(**raw["performance"]),
         matching=Matching(**raw["matching"]),
         repo=RepoConfig(**repo_raw),
     )
+
+    if config.performance.chunksize < 1:
+        raise ValueError(
+            f"performance chunksize deve ser >= 1 (recebido: "
+            f"{config.performance.chunksize})."
+        )
+
+    if config.performance.progress_every < 1:
+        raise ValueError(
+            f"performance.progress_every deve ser >= 1 (recebido: "
+            f"{config.performance.progress_every})."
+        )
+
+    return config
+

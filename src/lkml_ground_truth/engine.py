@@ -125,11 +125,15 @@ def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
     else:
         name, email = author_str, "unknown@example.com"
 
+    message_id = row.get("message_id")
+    if not message_id:
+        return None
+
     author = Signature(name, email, row.get("date"))
     content = (message_lines, None, diff_lines)
 
     message_diff = MessageDiff.__new__(MessageDiff)
-    MessageDiff.__init__(message_diff, row["message_id"], content, author)
+    MessageDiff.__init__(message_diff, message_id, content, author)
     return message_diff
 
 
@@ -146,13 +150,12 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
     if message_diff is None:
         return None
 
-    date = row["date"]
-    since_ts = int((date - timedelta(days=_config.matching.days_before)).timestamp())
-    until_ts = int((date + timedelta(days=_config.matching.days_after)).timestamp())
-
     try:
+        date = row["date"]
+        since_ts = int((date - timedelta(days=_config.matching.days_before)).timestamp())
+        until_ts = int((date + timedelta(days=_config.matching.days_after)).timestamp())
         candidates = find_candidates(_index, message_diff.diff.affected, since_ts, until_ts)
-    except Exception as exc:  # defeito no dataset não deve derrubar o worker
+    except Exception as exc:  
         return {
             "message_id": row.get("message_id"),
             "best_commit": None,
@@ -180,7 +183,10 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
             _thresholds.message_diff_weight * sim.msg
             + (1 - _thresholds.message_diff_weight) * sim.diff
         )
-        if best_score is None or score > best_score:
+        if (best_score is None 
+            or score > best_score
+            or (score == best_score and (best_hash is None or commit_hash < best_hash))
+        ):
             best_score, best_hash = score, commit_hash
 
     return {

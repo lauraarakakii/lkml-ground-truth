@@ -3,6 +3,6 @@ ignore-vcs = true
 ignore-hidden = true
 extend-exclude = [
     "*.svg",
-    "src/lkm]_ground_truth/pasta/***", 
+    "src/lkml_ground_truth/pasta/**", 
     "uv.lock",
 ]

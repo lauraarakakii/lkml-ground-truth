@@ -5,28 +5,28 @@
         "gnumake@latest",
         "pkg-config@latest",
         "uv@latest",
-        "gitolatest",
+        "git@latest",
         "libgit2@latest",
-        "ruffolatest",
+        "ruff@latest",
         "prek@latest"
     ],
     "env": {
-        "PROJECT DIR": "$PWD",
+        "PROJECT_DIR": "$PWD",
         "UV_PYTHON": "$PWD/.venv/bin/python"
     },
     "shell": {
         "init_hook": [ 
             "prek install"
-    ],
-    "scripts": {
-        "config": ["make config"],
-        "run": ["make run"],
-        "repo": ["make repo"],
-        "test": ["make test"],
-        "Lint": ["make 1int"],
-        "fmt": ["make fmt"],
-        "rebuild": ["make rebuild"],
-        "clean": ["make clean"]
+        ],
+        "scripts": {
+            "config": ["make config"],
+            "run": ["make run"],
+            "repo": ["make repo"],
+            "test": ["make test"],
+            "lint": ["make lint"],
+            "fmt": ["make fmt"],
+            "rebuild": ["make rebuild"],
+            "clean": ["make clean"]
+        }
     }
-}
 }
