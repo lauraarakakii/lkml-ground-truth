@@ -50,7 +50,7 @@ output_path = "output/matches_{list}.csv"
 # Cache do índice arquivo->commits (não depende da lista, é sobre o repo git;
 # construído uma vez só e reaproveitado entre listas diferentes)
 commit_index_cache = "commit_index_cache.pickle"
-
+enriched_root = "output/enriched"
 
 [performance]
 # Quantidade de processos paralelos usados para comparar patches (a parte
