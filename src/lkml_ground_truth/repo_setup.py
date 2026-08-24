@@ -42,6 +42,13 @@ def ensure_repo(repo_config: RepoConfig, repo_path: str) -> None:
         logger.info("Repositório git já existe em %s, pulando clone.", repo_path)
         return
 
+    if path.exists() and not path.is_dir():
+        raise FileNotFoundError(
+            f"'{repo_path}' existe mas não é um diretório. Aponte 'paths.repo_path' "
+            "para um clone git existente, ou para um diretório vazio/inexistente "
+            "para deixar o auto-clone criar."
+        )
+
     if path.is_dir() and any(path.iterdir()):
         raise FileNotFoundError(
             f"'{repo_path}' existe mas não parece um clone git válido "

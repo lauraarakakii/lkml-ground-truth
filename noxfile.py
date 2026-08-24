@@ -7,7 +7,7 @@ nox.options.reuse_existing_virtualenvs = True
 
 @nox.session
 def lint(session: nox.Session) -> None:
-    session.install("ruff≃0.8.04")
+    session.install("ruff~=0.8.04")
     session.run("ruff", "check", ".")
 
 

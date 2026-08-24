@@ -23,10 +23,10 @@ def _parse_git_log_dump(text: str) -> CommitIndex:
     for line in text.split("\n"):
         if line.startswith("\x01"):
             parts = line[1:].split(" ", 1)
-            if len(parts) != 2 or not parts[1].strip().isdigit():
+            if len(parts) != 2 or not parts[0].strip() or not parts[1].strip().isdigit():
                 logger.debug("Cabeçalho de commit inesperado ignorado: %r", line)
                 continue
-            commit_hash, ts = parts[0], parts[1].strip()
+            commit_hash, ts = parts[0].strip(), parts[1].strip()
             current_hash, current_ts = commit_hash, int(ts)
         elif line.strip():
             if current_hash is None:
@@ -79,7 +79,13 @@ def load_or_build_index(
         try:
             with cache_file.open("rb") as f:
                 return pickle.load(f)
-        except (pickle.UnpicklingError, EOFError, ValueError) as exc:
+        except (pickle.UnpicklingError, 
+                EOFError, 
+                ValueError, 
+                ModuleNotFoundError, 
+                AttributeError, 
+                ImportError, 
+                TypeError) as exc:
             logger.warning(
                 "Cache de índice corrompido (%s); reconstruindo: %s",
                 cache_path,
@@ -88,7 +94,7 @@ def load_or_build_index(
 
     index = build_commit_index(repo_path)
 
-    cache_file.parent.mkdir(parent=True, exist_ok=True)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
     tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
     with tmp_file.open("wb") as f:
         pickle.dump(index, f)

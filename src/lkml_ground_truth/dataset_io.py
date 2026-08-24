@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import glob as globmod
 import logging
-import pyarrow.parquet as pq
+
 import polars as pl
+import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 
