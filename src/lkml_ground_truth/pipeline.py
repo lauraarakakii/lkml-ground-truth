@@ -10,6 +10,8 @@ import logging
 from multiprocessing import Pool
 from pathlib import Path
 
+import dataclasses
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import polars as pl
 
 from .config import Config
@@ -145,16 +147,40 @@ def run(config: Config) -> None:
     init_worker_globals(config)  
 
     list_name = config.paths.list_name
-
+ 
     if list_name.lower() in ("all", "*", "todas"):
         available = config.paths.available_lists()
+
+        n_parallel = config.performance.resolved_parallel_lists(len(available))
         logger.info(
-            "list_name = '%s' -> processando TODAS as %d listas encontradas em %s",
+            "list_name = '%s' -> processando %d listas (%d em paralelo) de %s",
             list_name,
             len(available),
+            n_parallel,
             config.paths.dataset_root,
         )
-        for name in available:
-            process_list(config, name)
+
+        if n_parallel <= 1:
+            for name in available:
+                process_list(config, name)
+        else:
+            total_workers = config.performance.resolved_num_workers()
+            workers_per_list = max(1, total_workers // n_parallel)
+            perf = dataclasses.replace(
+                config.performance, num_workers=workers_per_list
+            )
+            derived_config = dataclasses.replace(config, performance=perf)
+            logger.info("Paralelismo de listas: %d listas x %d workers = %d processos totais",
+                        n_parallel, workers_per_list, n_parallel * workers_per_list
+            )
+
+            with ThreadPoolExecutor(max_workers=n_parallel) as executor:
+                futures = {
+                    executor.submit(process_list, derived_config, name): name
+                    for name in available
+                }
+                for future in as_completed(futures):
+                    future.result()
+
     else:
         process_list(config, list_name)

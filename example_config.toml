@@ -74,6 +74,8 @@ chunksize = 50
 # A cada quantos patches processados imprime uma linha de progresso
 progress_every = 500
 checkpoint_every = 200
+#1 = sequencial, 0 = automatico
+parallel_lists = 1
 
 [matching]
 # Janela de tempo (em dias) para procurar o commit correspondente a partir

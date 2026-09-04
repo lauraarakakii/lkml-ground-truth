@@ -1,6 +1,5 @@
 pygit2 
-fuzzywuzzy 
-python-Levenshtein 
+rapidfuzz 
 pandas 
 pyarrow
 GitPython

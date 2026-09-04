@@ -78,6 +78,14 @@ class Performance:
             return self.num_workers
         return max(1, cpu_count() - 1)
 
+    def resolved_parallel_lists(self, num_lists: int) -> int:
+        """Número de listas a processar em paralelo (``0`` = todos os núcleos menos um)."""
+        if self.parallel_lists == 0:
+            n = max(1, min(num_lists, cpu_count() // 4))
+        else:
+            n = max(1, self.parallel_lists)
+        return min(n, num_lists)
+
 
 DEFAULT_CLONE_URL = "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
 
