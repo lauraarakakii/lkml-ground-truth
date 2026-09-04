@@ -13,7 +13,8 @@ import functools
 
 from collections import defaultdict
 from enum import Enum
-from fuzzywuzzy import fuzz
+# from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 from multiprocessing import Pool, cpu_count
 from statistics import mean
 

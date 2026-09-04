@@ -70,6 +70,7 @@ class Performance:
     rebuild_index: bool
     chunksize: int
     progress_every: int
+    checkpoint_every: int = 200
 
     def resolved_num_workers(self) -> int:
         """Número de processos a usar (``0`` = todos os núcleos menos um)."""
