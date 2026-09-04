@@ -116,6 +116,25 @@ rebuild:
 		-t $(IMAGE) \
 		-f Dockerfile .
 
+.PHONY enrich
+enrich:
+	@if [ ! -f "$(CONFIG)" ]; then \
+		echo "==> Error: $(CONFIG) não encontrado. Rode 'make config' primeiro."; \
+		exit 1; \
+	fi
+	@if command -v uv >/dev/null 2>&1; then \
+		echo "==> Found uv toolchain, running natively..."; \
+		uv run lkml-ground-truth --config $(CONFIG) enrich; \
+	else \
+		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
+		$(MAKE) _ensure-image || exit 1; \
+		$(CONTAINER) run --rm -it \
+			-v $(CURDIR):/app \
+			-w /app \
+			$(IMAGE) \
+			--config $(CONFIG) enrich; \
+	fi
+
 .PHONY: clean
 clean:
 	@echo "==> Limpando artefatos locais..."

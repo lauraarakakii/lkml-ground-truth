@@ -16,10 +16,19 @@ import polars as pl
 
 from .config import Config
 from .dataset_io import read_parquet_safe
-from .engine import init_worker_globals, process_row
+from .engine import init_worker_globals, process_row, _open_worker_repo
 from .repo_setup import ensure_repo
 
+
 logger = logging.getLogger(__name__)
+_RESULT_SCHEMA = {
+    "message_id": pl.Utf8,
+    "best_commit": pl.Utf8,
+    "score": pl.Float64,
+    "is_match": pl.Boolean,
+    "is_confident_match": pl.Boolean,
+    "error": pl.Utf8,
+}
 
 def _checkpoint_path(output_path: str) -> Path:
     return Path(output_path).with_suffix(".ckpt")
@@ -80,15 +89,15 @@ def process_list(config: Config, list_name: str) -> None:
         return
 
     ckpt = _checkpoint_path(output_path)
-    results: list[dict] = prior_results
+    results: list[dict] = list(prior_results)
 
     if df_patches.height > 0:
         num_workers = config.performance.resolved_num_workers()
-    logger.info(
-        "Processando com %d processo(s) em paralelo "
-        "(ajuste em config.toml -> [performance] -> num_workers)...",
-        num_workers,
-    )
+        logger.info(
+            "Processando com %d processo(s) em paralelo "
+            "(ajuste em config.toml -> [performance] -> num_workers)...",
+            num_workers,
+        )
 
     checkpoint_every = config.performance.checkpoint_every
     batch: list[dict] = []
@@ -123,6 +132,7 @@ def process_list(config: Config, list_name: str) -> None:
 
     if not results:
         logger.info("Nenhum resultado (nenhuma linha tinha diff utilizável).")
+        pl.DataFrame(schema=_RESULT_SCHEMA).write_csv(output_path)
         return
     else:
         out = pl.DataFrame(results, infer_schema_length=None)
@@ -135,7 +145,7 @@ def process_list(config: Config, list_name: str) -> None:
 
     if ckpt.exists():
         ckpt.unlink()
-        logger.debbug("Checkpoint removido: %s", ckpt)
+        logger.debug("Checkpoint removido: %s", ckpt)
 
 def run(config: Config) -> None:
     """Ponto de entrada do pipeline: garante o repo, abre-o e processa a(s) lista(s)."""

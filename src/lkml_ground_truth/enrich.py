@@ -17,11 +17,11 @@ JOIN_KEY = "message_id"
 
 def enrich_list(config: Config, list_name: str) -> None:
     """Escreve o parquet enriquecido de uma lista (original + colunas de match).""" 
-    glob_path = config.paths.parquet_glob(list_name)
+    # glob_path = config.paths.parquet_glob(list_name)
     matches_path = Path(config.paths.resolved_output_path(list_name))
     output_path = Path(config.paths.enriched_parquet_path(list_name))
 
-    logger.info("=== Enriquecendo lista: %s ===", list_name)
+    # logger.info("=== Enriquecendo lista: %s ===", list_name)
 
     if not matches_path.exists(): 
         raise FileNotFoundError( 
@@ -29,25 +29,21 @@ def enrich_list(config: Config, list_name: str) -> None:
             f"{matches_path}. Rode o pipeline antes ('lkml-ground-truth run')."
         )
 
-    logger.info("Lendo dataset original: %s", glob_path)
-    df = read_parquet_safe(glob_path)
+    # logger.info("Lendo dataset original: %s", glob_path)
+    # df = read_parquet_safe(glob_path)
 
-    logger.info("Lendo matches: %s", matches_path)
+    # logger.info("Lendo matches: %s", matches_path)
+    # matches = pl.read_csv(matches_path)
+
     matches = pl.read_csv(matches_path)
-
-    matches = (
-        matches.select(JOIN_KEY, *MATCH_COLUMNS)
-        .filter(pl.col(JOIN_KEY).is_not_null() & (pl.col(JOIN_KEY) != ""))
-        .unique(subset=JOIN_KEY, keep="first")
-    )
-
-    enriched = df.join(matches, on=JOIN_KEY, how="left")
-    matched = enriched.get_column("best_commit").is_not_null().sum()
-    logger.info("-> %d/%d linhas com commit casado", matched, enriched.height)
+    matched = matches.get_column("best_commit").is_not_null().sum()
+    logger.info("-> %d linhas no CSV de matches (%d com commit)", matches.height, matched)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    enriched.write_parquet(output_path)
-    logger.info("Dataset enriquecido salvo em %s", output_path)
+    # enriched.write_parquet(output_path)
+    # logger.info("Dataset enriquecido salvo em %s", output_path)
+    matches.write_parquet(output_path)
+    logger.info("Parquet salvo em %s", output_path)
 
 def run(config: Config) -> None:
     """Ponto de entrada do enriquecimento: uma lista ou todas (como o pipeline). """ 

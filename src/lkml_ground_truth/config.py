@@ -26,7 +26,6 @@ class Paths:
     list_name: str
     output_path: str
     commit_index_cache: str
-
     enriched_root: str = "output/enriched"
 
     def parquet_glob(self, list_name: str | None = None) -> str:
@@ -71,6 +70,7 @@ class Performance:
     chunksize: int
     progress_every: int
     checkpoint_every: int = 200
+    parallel_lists: int =1
 
     def resolved_num_workers(self) -> int:
         """Número de processos a usar (``0`` = todos os núcleos menos um)."""
