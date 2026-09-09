@@ -116,7 +116,7 @@ rebuild:
 		-t $(IMAGE) \
 		-f Dockerfile .
 
-.PHONY enrich
+.PHONY: enrich
 enrich:
 	@if [ ! -f "$(CONFIG)" ]; then \
 		echo "==> Error: $(CONFIG) não encontrado. Rode 'make config' primeiro."; \

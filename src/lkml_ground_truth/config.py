@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import tomllib
+import glob
 from dataclasses import dataclass
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -60,6 +61,26 @@ class Paths:
             name for name in names if name 
         )
 
+    def available_output_lists(self) -> list[str]:
+        """Nomes de lista com CSV de matches já gerado (subpastas ``list=<nome>``)."""
+        template = self.output_path
+        marker = "{list}"
+        if marker not in template:
+            return []
+
+        prefix, suffix = template.split(marker, 1)
+        pattern = f"{prefix}*{suffix}"
+
+        names = []
+
+        for match in glob.glob(pattern):
+            if not match.startswith(prefix) or not match.endswith(suffix):
+                continue
+            name = match[len(prefix): len(match) - len(suffix)] if suffix else match[len(prefix):]
+            if name:
+                names.append(name)
+        return sorted(set(names))
+        
 
 @dataclass(frozen=True)
 class Performance:

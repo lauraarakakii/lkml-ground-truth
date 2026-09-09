@@ -50,7 +50,16 @@ def run(config: Config) -> None:
     list_name = config.paths.list_name
 
     if list_name.lower() in ("all", "*", "todas"):
-        available = config.paths.available_lists()
+        available = config.paths.available_output_lists()
+        if not available:
+            logger.warning(
+                "list_name = '%s', mas nenhum CSV de matches encontrado em '%s'. "
+                " -- nada a enriquecer. Rode o pipeline antes ('lkml-ground-truth run') "
+                "ou verifique 'paths.output_path' no config.toml.",
+                list_name,
+                config.paths.output_path,
+            )
+            return
         logger.info("list_name = '%s' -> enriquecendo TODAS as %d listas",
                     list_name,
                     len(available),

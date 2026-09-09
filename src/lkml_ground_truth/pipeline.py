@@ -16,7 +16,7 @@ import polars as pl
 
 from .config import Config
 from .dataset_io import read_parquet_safe
-from .engine import init_worker_globals, process_row, _open_worker_repo
+from .engine import init_worker_globals, process_row
 from .repo_setup import ensure_repo
 
 
@@ -103,7 +103,7 @@ def process_list(config: Config, list_name: str) -> None:
     batch: list[dict] = []
     rows_iter = df_patches.iter_rows(named=True)
 
-    with Pool(num_workers, initializer=_open_worker_repo) as pool:
+    with Pool(num_workers) as pool:
         for i, result in enumerate(
             pool.imap_unordered(
                 process_row, rows_iter, chunksize=config.performance.chunksize
