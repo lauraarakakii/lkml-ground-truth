@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+from email.policy import default
 import logging
+from ntpath import join
 
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .enrich import run as run_enrich
 from .pipeline import run
+from .query import run_query
 from .repo_setup import ensure_repo
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -57,7 +60,50 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "(left join por message_id) e grava um parquet enriquecido " \
         "em 'paths.enriched_root'. Rode depois de 'run'."
     )
-    
+
+    query_parser = subparsers.add_parser( 
+        "query",
+        help="Roda consulta(s) SQL (Polars SQL) sobre os parquets 'original' e "
+        "'enriched' (join por message_id). Sem SQL, abre um prompt interativo "
+        "(REPL) para rodar várias consultas em loop.",
+    )
+
+    query_parser.add_argument(
+    "sql",
+    nargs="?",
+    default=None,
+    help="Consulta SQL. Tabelas 'original' (dataset LKML5Ws) e 'enriched' (matches). "
+    "Ex.: \"SELECT * FROM enriched WHERE is_match=true LIMIT 10\". "
+    "Se omitida, abre o modo interativo "
+    )
+    query_parser.add_argument(
+        "-l",
+        "--list",
+        dest="list_name",
+        default=None,
+        help="Lista a consultar (padrão: 'paths.list_name). Use 'all' para todas "
+        "(adiciona a coluna 'list').",
+    )
+    query_parser.add_argument(
+        "--output",
+        default=None,
+        help="Arquivo de saida. Sem isso, só imprime no termínal."
+    )
+    query_parser.add_argument(
+        "-f",
+        "--format",
+        dest="fmt",
+        choices=("csv", "parquet", "json", "ndjson"),
+        default=None,
+        help="Formato de exportação (padrão: deduzido pela extensão de --output).",
+    )
+    query_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Máximo de linhas impressas no terminal (0 = todas). Não afeta a "
+        "exportação, que grava tudo. Padrão: 20.",
+    )
     return parser
 
 
@@ -79,6 +125,17 @@ def main(argv: list[str] | None = None) -> None:
 
     if command == "enrich":
         run_enrich(config)
+        return
+
+    if command == "query":
+        run_query(
+            config,
+            args.sql,
+            list_name=args.list_name,
+            output=args.output,
+            fmt=args.fmt,
+            limit=args.limit,
+        )
         return
 
     run(config)

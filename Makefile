@@ -10,6 +10,15 @@ IMAGE := lkml-ground-truth
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
 
+[FORMAT=csv]
+SQL ?=
+LIST ?=
+OUTPUT ?=
+FORMAT ?=
+QUERY_ARGS  :=(if $(LIST),--list $(LIST),) \
+			  (if $(OUTPUT),--output $(OUTPUT),) \
+			  (if $(FORMAT),--format $(FORMAT),) 
+
 .PHONY: all
 all: run
 
@@ -133,6 +142,26 @@ enrich:
 			-w /app \
 			$(IMAGE) \
 			--config $(CONFIG) enrich; \
+	fi
+
+.PHONY: query
+query:
+	@if [ ! -f "$(CONFIG)" ]; then \
+		echo "==> Error: $(CONFIG) não encontrado. Rode 'make config' primeiro."; \
+		exit 1; \
+	fi
+	@if command -v uv >/dev/null 2>&1; then \
+		echo "==> Found uv toolchain, running natively..."; \
+		uv run lkml-ground-truth --config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \
+	else \
+		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
+		$(MAKE) _ensure-image || exit 1; \
+		$(CONTAINER) run --rm -it \
+			-v $(CURDIR):/app \
+			-V $(DATASET_VOLUME):/app/resources/dataset \
+			-w /app \
+			$(IMAGE) \
+			--config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \
 	fi
 
 .PHONY: clean
