@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
-import pathlib as Path
+from collections.abc import Collection
+from pathlib import Path
 
 import polars as pl
 
@@ -20,6 +22,11 @@ ORIGINAL_TABLE = "original"
 ENRICHED_TABLE = "enriched"
 JOIN_KEY = "message_id"
 LIST_COLUMN = "list"
+
+_KNOWN_TABLES = frozenset((ORIGINAL_TABLE, ENRICHED_TABLE))
+_TABLE_REFERENCE = re.compile(
+    r"\b(?:from|join)\s+[`\"]?(original|enriched)[`\"]?\b", re.IGNORECASE
+)
 
 _ALL_ALIASES = ("all", "*", "todas")
 _EXIT_COMMANDS = ("exit", "quit", "sair", r"\q")
@@ -71,7 +78,9 @@ def _resolve_lists(config: Config, list_name: str | None) -> list[str]:
 def _load_original(config: Config, lists: list[str]) -> pl.DataFrame | None:
     frames = []
     for name in lists:
-        glob_path = Path(config.paths.parquet_glob(name))
+        # ``parquet_glob`` pode conter '*'; portanto ele deve continuar uma
+        # string até chegar ao leitor que resolve globs.
+        glob_path = config.paths.parquet_glob(name)
         try:
             df = read_parquet_safe(glob_path)
         except FileNotFoundError:
@@ -95,24 +104,43 @@ def _load_enriched(config: Config, lists: list[str]) -> pl.DataFrame | None:
         return None
     return pl.concat(frames, how="vertical_relaxed")
 
-def build_context(config: Config, list_name: str | None = None) -> pl.SQLContext:
-    lists = _resolve_lists(config, list_name)
+def _tables_referenced(query: str) -> frozenset[str]:
+    """Retorna as tabelas locais referenciadas por uma consulta SQL.
 
-    original = _load_original(config, lists)
-    enriched = _load_enriched(config, lists)
+    O resultado é usado apenas para adiar leituras caras no REPL. Quando não
+    for possível identificar uma tabela (por exemplo, um comando SQL fora do
+    subconjunto esperado), carregamos ambas para manter o comportamento antigo.
+    """
+    tables = frozenset(match.group(1).lower() for match in _TABLE_REFERENCE.finditer(query))
+    return tables or _KNOWN_TABLES
+
+
+def build_context(
+    config: Config,
+    list_name: str | None = None,
+    tables: Collection[str] | None = None,
+) -> pl.SQLContext:
+    lists = _resolve_lists(config, list_name)
+    requested_tables = set(tables or _KNOWN_TABLES)
+    unknown_tables = requested_tables - _KNOWN_TABLES
+    if unknown_tables:
+        raise ValueError(f"Tabela(s) desconhecida(s): {', '.join(sorted(unknown_tables))}")
+
+    original = _load_original(config, lists) if ORIGINAL_TABLE in requested_tables else None
+    enriched = _load_enriched(config, lists) if ENRICHED_TABLE in requested_tables else None
 
     frames: dict[str, pl.LazyFrame] = {}
-    if original is not None:
+    if ORIGINAL_TABLE in requested_tables and original is not None:
         frames[ORIGINAL_TABLE] = original.lazy()
-    else:
+    elif ORIGINAL_TABLE in requested_tables:
         logger.warning(
             "Nenhum parquet original encontrado para as listas: %s. "
             "Verifique 'paths.dataset_root' no config.toml",
             lists,
         )
-    if enriched is not None:
+    if ENRICHED_TABLE in requested_tables and enriched is not None:
         frames[ENRICHED_TABLE] = enriched.lazy()
-    else:
+    elif ENRICHED_TABLE in requested_tables:
         logger.warning(
             "Nenhum parquet enriquecido encontrado para as listas: %s. "
             "Verifique 'paths.enriched_root' no config.toml",
@@ -120,14 +148,14 @@ def build_context(config: Config, list_name: str | None = None) -> pl.SQLContext
         )
     if not frames:
         raise FileNotFoundError(
-            "Nenhum parquet original nem enriquecido encontrado para as listas: "
-            f"{lists}. Verifique 'paths.dataset_root' e 'paths.enriched_root' no config.toml"
+            "Nenhum parquet encontrado para as tabelas solicitadas "
+            f"({', '.join(sorted(requested_tables))}) e listas {lists}. "
+            "Verifique 'paths.dataset_root' e 'paths.enriched_root' no config.toml"
         )
     return pl.SQLContext(frames, eager=True)
 
 def run_query(config: Config, query: str, list_name: str | None = None) -> pl.DataFrame: 
-    
-    ctx = build_context(config, list_name) 
+    ctx = build_context(config, list_name, _tables_referenced(query))
     logger.info("Tabelas disponiveis: %s", ", ".join(sorted(ctx.tables())))
     return ctx.execute(query)
 
@@ -187,9 +215,9 @@ def run_repl(
     fmt: str | None = None,
     limit: int = 20,
 )-> None:
-    ctx = build_context(config, list_name)
-    _print_catalog(ctx) 
-    print('Digite a consulta SQL terminada por ";" (exit; / Ctrl+C / CtrI+D para sair).\n')
+    contexts: dict[frozenset[str], pl.SQLContext] = {}
+    print("Tabelas carregadas sob demanda: original, enriched.\n")
+    print('Digite a consulta SQL terminada por ";" (exit; / Ctrl+C / Ctrl+D para sair).\n')
     while True:
         try:
             query = _read_multiline()
@@ -198,6 +226,13 @@ def run_repl(
             if query.rstrip(";").strip().lower() in _EXIT_COMMANDS:
                 print("Saindo.")
                 break
+
+            tables = _tables_referenced(query)
+            ctx = contexts.get(tables)
+            if ctx is None:
+                logger.info("Carregando tabelas: %s", ", ".join(sorted(tables)))
+                ctx = build_context(config, list_name, tables)
+                contexts[tables] = ctx
 
             start = time.perf_counter()
             result = ctx.execute(query)

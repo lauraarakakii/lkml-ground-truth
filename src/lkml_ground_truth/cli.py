@@ -10,8 +10,8 @@ from ntpath import join
 
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .enrich import run as run_enrich
-from .pipeline import run
-from .query import run_query
+from .pipeline import run as run_pipeline
+from .query import run as run_query_command
 from .repo_setup import ensure_repo
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -128,7 +128,9 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if command == "query":
-        run_query(
+        # Sem SQL, ``run`` abre o REPL e mantém o mesmo SQLContext para as
+        # consultas seguintes. Com SQL, executa apenas a consulta informada.
+        run_query_command(
             config,
             args.sql,
             list_name=args.list_name,
@@ -138,7 +140,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         return
 
-    run(config)
+    run_pipeline(config)
 
 
 if __name__ == "__main__":

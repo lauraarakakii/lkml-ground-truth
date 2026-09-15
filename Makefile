@@ -10,14 +10,13 @@ IMAGE := lkml-ground-truth
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
 
-[FORMAT=csv]
 SQL ?=
 LIST ?=
 OUTPUT ?=
 FORMAT ?=
-QUERY_ARGS  :=(if $(LIST),--list $(LIST),) \
-			  (if $(OUTPUT),--output $(OUTPUT),) \
-			  (if $(FORMAT),--format $(FORMAT),) 
+QUERY_ARGS  := $(if $(LIST),--list $(LIST)) \
+			  $(if $(OUTPUT),--output $(OUTPUT)) \
+			  $(if $(FORMAT),--format $(FORMAT))
 
 .PHONY: all
 all: run
@@ -158,7 +157,7 @@ query:
 		$(MAKE) _ensure-image || exit 1; \
 		$(CONTAINER) run --rm -it \
 			-v $(CURDIR):/app \
-			-V $(DATASET_VOLUME):/app/resources/dataset \
+			-v $(DATASET_VOLUME):/app/resources/dataset \
 			-w /app \
 			$(IMAGE) \
 			--config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import glob as globmod
 import logging
+import os
+from os import PathLike
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -11,7 +13,7 @@ import pyarrow.parquet as pq
 logger = logging.getLogger(__name__)
 
 
-def read_parquet_safe(path_or_glob: str) -> pl.DataFrame:
+def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
     """Lê um parquet único ou múltiplos via glob (ex.: ``pasta/*.parquet``).
 
     Estratégia principal: Polars, que lê glob nativamente. Fallback: lê
@@ -20,6 +22,8 @@ def read_parquet_safe(path_or_glob: str) -> pl.DataFrame:
     trava em colunas aninhadas (bug conhecido com list/struct em múltiplos
     chunks).
     """
+    path_or_glob = os.fspath(path_or_glob)
+
     try:
         return pl.read_parquet(path_or_glob)
     except Exception as exc:
