@@ -1,7 +1,7 @@
 [project]
 name = "lkml-ground-truth"
 version = "0.1.0"
-description = "Ground truth de patch->commit para a LKML, casando e-mails do MailingListsHeritage com o repositório git do Linux via motor de comparação do PaStA."
+description = "Patch-to-commit ground truth for LKML, matching MailingListsHeritage emails with Linux Git commits through the PaStA comparison engine."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
@@ -37,7 +37,7 @@ packages = ["src/lkml_ground_truth"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Módulo vendorizado: mantém o estilo original do PaStA (import * etc.).
+# Vendored module: preserves the original PaStA style (including import *).
 extend-exclude = ["src/lkml_ground_truth/pasta"]
 
 [tool.ruff.lint]

@@ -16,11 +16,11 @@ def test_ensure_repo_skips_clone_when_repo_already_exists(tmp_path, monkeypatch)
     _init_real_git_repo(repo_path)
 
     def _fail_if_called(*args, **kwargs):
-        raise AssertionError("git clone não deveria ter sido chamado")
+        raise AssertionError("git clone should not have been called")
 
     monkeypatch.setattr(subprocess, "run", _fail_if_called)
 
-    # não levanta, não tenta clonar
+    # Does not raise and does not attempt cloning.
     ensure_repo(RepoConfig(auto_clone=True), str(repo_path))
 
 
@@ -36,7 +36,7 @@ def test_ensure_repo_raises_when_path_exists_but_is_not_a_git_repo(tmp_path):
     repo_path.mkdir()
     (repo_path / "some_file.txt").write_text("oops")
 
-    with pytest.raises(FileNotFoundError, match="não parece um clone git"):
+    with pytest.raises(FileNotFoundError, match="does not look like a valid Git clone"):
         ensure_repo(RepoConfig(auto_clone=True), str(repo_path))
 
 

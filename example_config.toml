@@ -1,89 +1,51 @@
 # =============================================================================
-# Configuração do pipeline LKML5Ws + PaStA
+# LKML Ground Truth pipeline configuration
 # =============================================================================
-# Edite os valores abaixo conforme seu ambiente. Não precisa mexer em nenhum
-# outro arquivo do projeto para ajustar performance, caminhos ou qual lista
-# processar.
+# This is the only file you need to edit to adjust paths, performance, and
+# matching behavior for your environment.
 
 [repo]
-# Clonagem automática do repositório do kernel (opcional). Desligada por
-# padrão: se você já tem um clone pronto em outro lugar, deixe
-# auto_clone = false e só aponte "paths.repo_path" pra ele.
-#
-# Se ligar, o pipeline (ou "make repo" / "lkml-ground-truth clone-repo")
-# clona sozinho para "paths.repo_path" caso ele ainda não exista.
+# Automatically clone the Linux repository when paths.repo_path is missing.
 auto_clone = false
-
-# De onde clonar (o mirror oficial do Linus no kernel.org, por padrão).
 clone_url = "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
 
-# Opcional: limita o clone a partir dessa data (formato "YYYY-MM-DD"),
-# usando "git clone --shallow-since". Deixe vazio ("") para clonar o
-# histórico completo do kernel (décadas, dezenas de GB).
-# Útil quando você só precisa casar patches de um período recente: um
-# clone raso é muito mais rápido e ocupa bem menos disco. Só tome cuidado
-# pra "since" cobrir toda a janela de tempo que "matching.days_before" /
-# "matching.days_after" pode precisar buscar candidatos.
+# Optional YYYY-MM-DD lower bound for a shallow clone. Leave empty for the
+# complete history; use a date early enough for the matching window.
 since = ""
 
-
 [paths]
-# Repositório git do Linux (se "repo.auto_clone" estiver ligado e o
-# caminho abaixo não existir ainda, ele é clonado automaticamente aqui;
-# senão, precisa ser um clone real do kernel já feito por você).
+# Existing Linux Git clone, or destination when repo.auto_clone is true.
 repo_path = "resources/linux/repo"
 
-# Pasta raiz do dataset, que contém as subpastas "list=<nome>/*.parquet"
+# Root of the MLH Parser dataset, containing list=<name>/*.parquet partitions.
 dataset_root = "/path/to/mlh/output/parser/dataset"
 
-# Qual lista processar (bate com o nome depois de "list=" nas subpastas).
-# Exemplos: "netdev", "bpf", "arm-scmi", "linux-usb", etc.
-# Use "all" para processar TODAS as listas encontradas em dataset_root,
-# uma de cada vez, cada uma gerando seu próprio arquivo de saída.
+# A single list name, or "all" to process every available list.
 list_name = "netdev"
 
-# Onde salvar o resultado. "{list}" é substituído automaticamente pelo nome
-# da lista sendo processada, então cada lista gera seu próprio arquivo
-# (evita sobrescrever resultado de uma lista com o de outra).
+# {list} is expanded for each processed mailing list.
 output_path = "output/matches_{list}.csv"
-
-# Cache do índice arquivo->commits (não depende da lista, é sobre o repo git;
-# construído uma vez só e reaproveitado entre listas diferentes)
-commit_index_cache = "commit_index_cache.pickle"
+commit_index_cache = "output/cache/commit_index.pickle"
 enriched_root = "output/enriched"
 
 [performance]
-# Quantidade de processos paralelos usados para comparar patches (a parte
-# de fuzzy-matching é a que mais consome CPU).
-#   0 = automático (usa todos os núcleos disponíveis menos 1)
-# Ajuste esse número para controlar quantos núcleos do servidor o projeto
-# vai usar -- por exemplo, se o servidor é compartilhado com outras cargas,
-# reduza esse valor para não competir por CPU.
+# 0 uses all available CPU cores except one.
 num_workers = 0
-
-# Se true, reconstrói o índice arquivo->commits do zero mesmo se já existir
-# um cache salvo (use isso se você reclonar/atualizar o repositório do linux)
 rebuild_index = false
-
-# Quantos patches cada worker processa por vez antes de pedir mais trabalho
-# (chunksize do multiprocessing.Pool.imap_unordered). Valores maiores reduzem
-# overhead de comunicação entre processos, mas atualizam o progresso com
-# menos frequência.
 chunksize = 50
-
-# A cada quantos patches processados imprime uma linha de progresso
 progress_every = 500
 checkpoint_every = 200
-#1 = sequencial, 0 = automatico
+
+# Number of lists processed concurrently. Keep this at 1 unless the host has
+# sufficient memory and CPU capacity for multiple repository workers.
 parallel_lists = 1
 
 [matching]
-# Janela de tempo (em dias) para procurar o commit correspondente a partir
-# da data de envio do e-mail
+# Candidate commit time window relative to the patch email date.
 days_before = 3
 days_after = 365
 
-# Thresholds do motor de comparação do PaStA (0.0 a 1.0)
+# PaStA comparison-engine thresholds (0.0 to 1.0).
 autoaccept = 0.8
 interactive = 0.5
 diff_lines_ratio = 0.4

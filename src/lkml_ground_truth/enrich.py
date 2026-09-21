@@ -1,4 +1,4 @@
-"""Enriquecimento: junta o resultado do match de volta no dataset original."""
+"""Enrichment: join matching results back into the original dataset."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ MATCH_COLUMNS = ("best_commit", "score", "is_match", "is_confident_match")
 JOIN_KEY = "message_id"
 
 def enrich_list(config: Config, list_name: str) -> None:
-    """Escreve o parquet enriquecido de uma lista (original + colunas de match).""" 
+    """Write enriched Parquet data for one list (source rows plus match columns)."""
     # glob_path = config.paths.parquet_glob(list_name)
     matches_path = Path(config.paths.resolved_output_path(list_name))
     output_path = Path(config.paths.enriched_parquet_path(list_name))
@@ -25,8 +25,8 @@ def enrich_list(config: Config, list_name: str) -> None:
 
     if not matches_path.exists(): 
         raise FileNotFoundError( 
-            f"CSV de matches não encontrado para a lista '{list_name}': "
-            f"{matches_path}. Rode o pipeline antes ('lkml-ground-truth run')."
+            f"Match CSV was not found for list '{list_name}': {matches_path}. "
+            "Run the pipeline first ('lkml-ground-truth run')."
         )
 
     # logger.info("Lendo dataset original: %s", glob_path)
@@ -37,7 +37,7 @@ def enrich_list(config: Config, list_name: str) -> None:
 
     matches = pl.read_csv(matches_path)
     matched = matches.get_column("best_commit").is_not_null().sum()
-    logger.info("-> %d linhas no CSV de matches (%d com commit)", matches.height, matched)
+    logger.info("-> %d rows in match CSV (%d with a commit)", matches.height, matched)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # enriched.write_parquet(output_path)
@@ -46,21 +46,20 @@ def enrich_list(config: Config, list_name: str) -> None:
     logger.info("Parquet salvo em %s", output_path)
 
 def run(config: Config) -> None:
-    """Ponto de entrada do enriquecimento: uma lista ou todas (como o pipeline). """ 
+    """Enrichment entry point for one list or every available list."""
     list_name = config.paths.list_name
 
-    if list_name.lower() in ("all", "*", "todas"):
+    if list_name.lower() in ("all", "*"):
         available = config.paths.available_output_lists()
         if not available:
             logger.warning(
-                "list_name = '%s', mas nenhum CSV de matches encontrado em '%s'. "
-                " -- nada a enriquecer. Rode o pipeline antes ('lkml-ground-truth run') "
-                "ou verifique 'paths.output_path' no config.toml.",
+                "list_name = '%s', but no match CSVs were found at '%s'. "
+                "Run the pipeline first or check paths.output_path in config.toml.",
                 list_name,
                 config.paths.output_path,
             )
             return
-        logger.info("list_name = '%s' -> enriquecendo TODAS as %d listas",
+        logger.info("list_name = '%s' -> enriching all %d lists",
                     list_name,
                     len(available),
                     )

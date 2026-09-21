@@ -1,4 +1,4 @@
-"""Leitura tolerante a falhas dos datasets parquet do MailingListsHeritage."""
+"""Fault-tolerant readers for MailingListsHeritage Parquet datasets."""
 
 from __future__ import annotations
 
@@ -14,13 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
-    """Lê um parquet único ou múltiplos via glob (ex.: ``pasta/*.parquet``).
+    """Read one Parquet file or multiple files through a glob pattern.
 
-    Estratégia principal: Polars, que lê glob nativamente. Fallback: lê
-    cada arquivo individualmente, row-group por row-group via PyArrow --
-    para datasets grandes/multi-arquivo onde o ``pyarrow.dataset.Scanner``
-    trava em colunas aninhadas (bug conhecido com list/struct em múltiplos
-    chunks).
+    Polars is the primary reader. The fallback reads every file and row group
+    through PyArrow for datasets that trigger nested-column scanner failures.
     """
     path_or_glob = os.fspath(path_or_glob)
 
@@ -28,8 +25,7 @@ def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
         return pl.read_parquet(path_or_glob)
     except Exception as exc:
         logger.warning(
-            "polars.read_parquet falhou (%s), tentando leitura "
-            "row-group por row-group via pyarrow...",
+            "polars.read_parquet failed (%s); trying PyArrow row-group reads...",
             type(exc).__name__,
         )
 
@@ -42,8 +38,8 @@ def read_parquet_safe(path_or_glob: str | PathLike[str]) -> pl.DataFrame:
 
     if not files:
         raise FileNotFoundError(
-            f"Nenhum arquivo .parquet encontrado para: {path_or_glob!r}. "
-            "Verifique 'paths.dataset_root'/nome da lista no config.toml"
+            f"No .parquet files found for: {path_or_glob!r}. "
+            "Check paths.dataset_root and the list name in config.toml."
         )
 
     parts = []

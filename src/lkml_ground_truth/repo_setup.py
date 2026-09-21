@@ -1,12 +1,4 @@
-"""Clonagem opcional do repositório git do Linux.
-
-Por padrão o usuário providencia o clone manualmente (``auto_clone =
-false``, o padrão) e só aponta ``repo_path`` para ele em ``config.toml``.
-Quando ``auto_clone = true``, :func:`ensure_repo` cuida disso sozinho
-antes do pipeline rodar -- inclusive com a opção de um clone raso
-(``since``) para não precisar baixar décadas de histórico quando só é
-preciso casar patches de um período recente.
-"""
+"""Optional cloning for the Linux Git repository."""
 
 from __future__ import annotations
 
@@ -20,63 +12,50 @@ logger = logging.getLogger(__name__)
 
 
 def _looks_like_git_repo(path: Path) -> bool:
-    """``True`` se ``path`` já é um clone git (normal ou bare)."""
+    """Return whether ``path`` is a regular or bare Git clone."""
     if (path / ".git").exists():
         return True
-    # repositório bare (ex.: mirror sem working tree)
+    # Bare repository, such as a mirror without a working tree.
     return (path / "HEAD").exists() and (path / "objects").is_dir()
 
 
 def ensure_repo(repo_config: RepoConfig, repo_path: str) -> None:
-    """Garante que ``repo_path`` seja um clone git válido antes do pipeline rodar.
-
-    - Se já existe um repositório em ``repo_path``, não faz nada.
-    - Se não existe e ``auto_clone`` está desligado, levanta um erro
-      explicando como cloná-lo manualmente ou ligar o auto-clone.
-    - Se não existe e ``auto_clone`` está ligado, clona (raso, a partir de
-      ``repo_config.since``, ou completo).
-    """
+    """Ensure ``repo_path`` contains a valid Git clone before processing."""
     path = Path(repo_path)
 
     if _looks_like_git_repo(path):
-        logger.info("Repositório git já existe em %s, pulando clone.", repo_path)
+        logger.info("Git repository already exists at %s; skipping clone.", repo_path)
         return
 
     if path.exists() and not path.is_dir():
         raise FileNotFoundError(
-            f"'{repo_path}' existe mas não é um diretório. Aponte 'paths.repo_path' "
-            "para um clone git existente, ou para um diretório vazio/inexistente "
-            "para deixar o auto-clone criar."
+            f"'{repo_path}' exists but is not a directory. Set paths.repo_path "
+            "to an existing Git clone or an empty/nonexistent directory for auto-clone."
         )
 
     if path.is_dir() and any(path.iterdir()):
         raise FileNotFoundError(
-            f"'{repo_path}' existe mas não parece um clone git válido "
-            "(sem .git/objects). Aponte 'paths.repo_path' para um clone "
-            "existente, ou para um diretório vazio/inexistente para deixar "
-            "o auto-clone criar."
+            f"'{repo_path}' exists but does not look like a valid Git clone "
+            "(missing .git/objects). Set paths.repo_path to an existing clone "
+            "or an empty/nonexistent directory for auto-clone."
         )
 
     if not repo_config.auto_clone:
         example_cmd = f"git clone {repo_config.clone_url} {repo_path}"
         raise FileNotFoundError(
-            f"Repositório git não encontrado em '{repo_path}'.\n"
-            f"  - Clone manualmente:  {example_cmd}\n"
-            "  - Ou habilite o auto-clone em config.toml:\n"
+            f"Git repository not found at '{repo_path}'.\n"
+            f"  - Clone it manually:  {example_cmd}\n"
+            "  - Or enable auto-clone in config.toml:\n"
             "        [repo]\n"
             "        auto_clone = true\n"
-            "        # since = \"2015-01-01\"  # opcional: só esse período em diante"
+            "        # since = \"2015-01-01\"  # optional lower history bound"
         )
 
     clone_repo(repo_config, repo_path)
 
 
 def clone_repo(repo_config: RepoConfig, repo_path: str) -> None:
-    """Clona ``repo_config.clone_url`` em ``repo_path``.
-
-    Faz um clone raso (``--shallow-since``) se ``repo_config.since`` estiver
-    preenchido, ou um clone completo caso contrário.
-    """
+    """Clone ``repo_config.clone_url`` into ``repo_path``."""
     path = Path(repo_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -84,8 +63,7 @@ def clone_repo(repo_config: RepoConfig, repo_path: str) -> None:
 
     if repo_config.is_shallow():
         logger.info(
-            "Clonando %s em %s (apenas histórico a partir de %s -- clone "
-            "raso, bem mais rápido e leve que o histórico completo)...",
+            "Cloning %s into %s (history since %s; shallow clone)...",
             repo_config.clone_url,
             repo_path,
             repo_config.since,
@@ -93,22 +71,20 @@ def clone_repo(repo_config: RepoConfig, repo_path: str) -> None:
         cmd.append(f"--shallow-since={repo_config.since}")
     else:
         logger.info(
-            "Clonando %s em %s (histórico completo -- isso baixa dezenas "
-            "de GB e pode levar bastante tempo; defina 'repo.since' em "
-            "config.toml se só precisar de um período recente)...",
+            "Cloning %s into %s (complete history; this can download tens of GB). "
+            "Set repo.since in config.toml if only recent history is needed...",
             repo_config.clone_url,
             repo_path,
         )
 
     cmd += [repo_config.clone_url, str(path)]
 
-    # git manda o progresso em stderr; deixa passar direto pro terminal
-    # do usuário em vez de capturar (clone pode levar minutos/horas).
+    # Git writes progress to stderr; preserve it in the user's terminal.
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         raise RuntimeError(
-            f"'git clone' falhou (exit code {result.returncode}) ao clonar "
-            f"{repo_config.clone_url} em {repo_path}."
+            f"'git clone' failed (exit code {result.returncode}) while cloning "
+            f"{repo_config.clone_url} into {repo_path}."
         )
 
-    logger.info("Clone concluído em %s.", repo_path)
+    logger.info("Clone completed at %s.", repo_path)

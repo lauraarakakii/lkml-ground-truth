@@ -1,11 +1,18 @@
-# Variáveis de runtime do pipeline (sobrepõem o que está em config.toml
-# apontando o processo pra outro arquivo de config, se necessário)
 CONFIG ?= config.toml
 
-# Detecção de runtime de container (docker ou podman), como no
-# containers.mk do MailingListsHeritage
 CONTAINER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 IMAGE := lkml-ground-truth
+
+# Roda o container com o UID/GID de quem invocou o make (nunca root).
+# Podman rootless: keep-id mapeia o seu usuário direto. Docker: --user.
+ifneq ($(CONTAINER),)
+ifeq ($(shell $(CONTAINER) --version 2>/dev/null | grep -ci podman),0)
+USER_FLAGS := --user $(shell id -u):$(shell id -g)
+else
+USER_FLAGS := --userns=keep-id
+endif
+endif
+RUN := $(CONTAINER) run --rm $(USER_FLAGS)
 
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
@@ -14,9 +21,9 @@ SQL ?=
 LIST ?=
 OUTPUT ?=
 FORMAT ?=
-QUERY_ARGS  := $(if $(LIST),--list $(LIST)) \
-			  $(if $(OUTPUT),--output $(OUTPUT)) \
-			  $(if $(FORMAT),--format $(FORMAT))
+QUERY_ARGS := $(if $(LIST),--list $(LIST)) \
+              $(if $(OUTPUT),--output $(OUTPUT)) \
+              $(if $(FORMAT),--format $(FORMAT))
 
 .PHONY: all
 all: run
@@ -31,14 +38,16 @@ config:
 		echo "==> $(CONFIG) já existe, nada a fazer."; \
 	fi
 
-# Alvo interno (não chame direto): garante que a imagem exista antes de
-# qualquer target que rode via container, construindo-a se necessário.
+# Alvo interno: garante runtime, imagem e diretórios de volume.
+# Os diretórios são criados AQUI, com o seu usuário. Se não existirem, o
+# Docker os cria como root no host ao montar o volume.
 .PHONY: _ensure-image
 _ensure-image:
 	@if [ -z "$(CONTAINER)" ]; then \
 		echo "==> Nenhum runtime de container (docker/podman) encontrado no PATH."; \
 		exit 1; \
 	fi; \
+	mkdir -p "$(REPO_VOLUME)" "$(DATASET_VOLUME)"; \
 	if ! $(CONTAINER) image inspect $(IMAGE) >/dev/null 2>&1; then \
 		echo "==> Image $(IMAGE) not found, building..."; \
 		$(MAKE) rebuild; \
@@ -59,11 +68,10 @@ repo:
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
-		$(CONTAINER) run --rm -it \
+		$(RUN) -it \
 			-v $(CURDIR):/app \
 			-v $(REPO_VOLUME):/app/resources/linux/repo \
-    		-v $(DATASET_VOLUME):/app/resources/dataset \
-			-w /app \
+			-v $(DATASET_VOLUME):/app/resources/dataset \
 			$(IMAGE) \
 			--config $(CONFIG) clone-repo --force; \
 	fi
@@ -80,11 +88,10 @@ run:
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
-		$(CONTAINER) run --rm -it \
+		$(RUN) -it \
 			-v $(CURDIR):/app \
-		    -v /resources/linux/repo:/app/resources/linux/repo \
-			-v /media/discao/codev/analysis.laura/MLH-archiver/output/parser/dataset:/app/resources/dataset \
-			-w /app \
+			-v $(REPO_VOLUME):/app/resources/linux/repo \
+			-v $(DATASET_VOLUME):/app/resources/dataset \
 			$(IMAGE) \
 			--config $(CONFIG); \
 	fi
@@ -97,11 +104,11 @@ test:
 	else \
 		echo "==> Python Testing toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
-		$(CONTAINER) run --rm \
+		$(RUN) \
 			-v $(CURDIR):/app \
-			-w /app \
+			--entrypoint uvx \
 			$(IMAGE) \
-			uvx nox; \
+			nox; \
 	fi
 
 .PHONY: lint
@@ -118,11 +125,7 @@ fmt:
 
 .PHONY: rebuild
 rebuild:
-	$(CONTAINER) build \
-		--build-arg USER_ID=$(shell id -u) \
-		--build-arg GROUP_ID=$(shell id -g) \
-		-t $(IMAGE) \
-		-f Dockerfile .
+	$(CONTAINER) build -t $(IMAGE) -f Dockerfile .
 
 .PHONY: enrich
 enrich:
@@ -136,9 +139,8 @@ enrich:
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
-		$(CONTAINER) run --rm -it \
+		$(RUN) -it \
 			-v $(CURDIR):/app \
-			-w /app \
 			$(IMAGE) \
 			--config $(CONFIG) enrich; \
 	fi
@@ -155,10 +157,9 @@ query:
 	else \
 		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
 		$(MAKE) _ensure-image || exit 1; \
-		$(CONTAINER) run --rm -it \
+		$(RUN) -it \
 			-v $(CURDIR):/app \
 			-v $(DATASET_VOLUME):/app/resources/dataset \
-			-w /app \
 			$(IMAGE) \
 			--config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \
 	fi

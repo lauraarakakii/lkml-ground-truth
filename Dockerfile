@@ -1,8 +1,5 @@
 FROM python:3.12-slim AS builder
 
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV UV_COMPILE_BYTECODE=1
@@ -20,25 +17,29 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN uv sync --locked
 
+
 FROM python:3.12-slim AS runtime
 
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
+# Root só existe aqui, em build time (apt precisa dele)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd -g ${GROUP_ID} app \
-&& useradd -m -u ${USER_ID} -g ${GROUP_ID} app
+    && rm -rf /var/lib/apt/lists/* \
+    # repos montados podem ter outro dono; evita "dubious ownership"
+    && git config --system --add safe.directory '*' \
+    # diretórios graváveis por qualquer UID
+    && mkdir -p /app/output /home/app \
+    && chmod 1777 /app/output /home/app
 
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=app:app . .
+COPY . .
 
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH" \
+    HOME=/home/app \
+    PYTHONDONTWRITEBYTECODE=1
 
-USER app
+# Default não-root; sobrescrito por --user em runtime
+USER 1000:1000
 
 ENTRYPOINT ["lkml-ground-truth"]

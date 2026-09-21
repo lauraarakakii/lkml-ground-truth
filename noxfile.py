@@ -1,4 +1,4 @@
-"""Sessões de lint e teste, executadas localmente ou via CI (make test / CI)."""
+"""Lint and test sessions for local development and CI."""
 
 import nox
 

@@ -1,10 +1,4 @@
-"""Núcleo de comparação patch<->commit, isolado do orquestrador do pipeline.
-
-Mantém o estado global por processo worker (repositório, índice e
-configuração) e as funções que rodam dentro de cada worker do
-``multiprocessing.Pool``. Ver :mod:`lkml_ground_truth.pipeline` para a
-orquestração (leitura do dataset, criação do Pool, escrita do resultado).
-"""
+"""Patch-to-commit comparison core, isolated from pipeline orchestration."""
 
 from __future__ import annotations
 
@@ -23,12 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Thresholds:
-    """Subconjunto de ``pypasta.Config.py`` usado pelo motor de comparação.
-
-    Copiado apenas com os campos necessários para ``evaluate_patch_pair``
-    (o ``Config.py`` original do PaStA também referencia ``Clustering.py``
-    e ``PatchStack.py``, que este projeto não usa).
-    """
+    """Subset of ``pypasta.Config.py`` required by the comparison engine."""
 
     def __init__(
         self,
@@ -45,11 +34,11 @@ class Thresholds:
         self.filename = filename
         self.message_diff_weight = message_diff_weight
         self.diff_lines_ratio = diff_lines_ratio
-        self.author_date_interval = 0  # não usado neste pipeline
+        self.author_date_interval = 0  # Not used by this pipeline.
 
 
 def thresholds_from_config(config: Config) -> Thresholds:
-    """Constrói :class:`Thresholds` a partir da seção ``[matching]``."""
+    """Build :class:`Thresholds` from the ``[matching]`` section."""
     return Thresholds(
         autoaccept=config.matching.autoaccept,
         interactive=config.matching.interactive,
@@ -61,10 +50,8 @@ def thresholds_from_config(config: Config) -> Thresholds:
 
 
 # ---------------------------------------------------------------------------
-# Estado global por processo. É montado no processo principal ANTES de criar
-# o Pool -- no Linux (fork), os processos filhos herdam essas variáveis já
-# populadas via copy-on-write, sem precisar serializar (pygit2.Repository e
-# o índice não são triviais de serializar/passar via pickle a cada chamada).
+# Process-global state is initialized before the pool. Linux fork workers
+# inherit it through copy-on-write, avoiding repeated serialization.
 # ---------------------------------------------------------------------------
 
 _repo: Repository | None = None
@@ -74,11 +61,7 @@ _thresholds: Thresholds | None = None
 
 
 def init_worker_globals(config: Config) -> None:
-    """Abre o repositório e carrega/constrói o índice no processo principal.
-
-    Deve ser chamado ANTES de criar o ``Pool`` para que os workers herdem
-    o estado via fork, sem custo de serialização.
-    """
+    """Open the repository and load or build the index in the main process."""
     global _repo, _index, _config, _thresholds
     _config = config
     _thresholds = thresholds_from_config(config)
@@ -91,10 +74,9 @@ def init_worker_globals(config: Config) -> None:
 
 
 def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
-    """Converte uma linha do dataset em um :class:`MessageDiff` do PaStA.
+    """Convert a dataset row into a PaStA :class:`MessageDiff`.
 
-    Retorna ``None`` quando a linha não tem diff utilizável (sem código,
-    diff não parseável, ou sem arquivos afetados).
+    Return ``None`` when a row has no usable or parseable diff.
     """
     code = row.get("code")
     if code is None or len(code) == 0:
@@ -106,7 +88,7 @@ def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
     try:
         parsed_diff = Diff(diff_lines)
     except Exception:
-        logger.debug("Falha ao parsear diff de %s", row.get("message_id"))
+        logger.debug("Could not parse diff for %s", row.get("message_id"))
         return None
 
     if not parsed_diff.affected:
@@ -138,11 +120,7 @@ def row_to_messagediff(row: dict[str, Any]) -> MessageDiff | None:
 
 
 def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
-    """Casa uma linha do dataset (e-mail com patch) com o melhor commit.
-
-    Roda dentro de cada processo worker, usando o índice e o repositório
-    globais já abertos (ver :func:`init_worker_globals`).
-    """
+    """Match a dataset patch-email row with the best candidate commit."""
     assert _config is not None and _thresholds is not None and _repo is not None
     assert _index is not None
 

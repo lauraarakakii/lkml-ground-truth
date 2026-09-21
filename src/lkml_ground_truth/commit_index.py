@@ -1,4 +1,4 @@
-"""Índice arquivo -> lista de commits que tocam esse arquivo."""
+"""Index mapping each file to commits that modify it."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ CommitIndex = dict[str, list[tuple[int, str]]]
 
 
 def _parse_git_log_dump(text: str) -> CommitIndex:
-    """Converte a saída de ``git log --name-only --format=\\x01%H %ct``."""
+    """Parse ``git log --name-only --format=\\x01%H %ct`` output."""
     index: dict[str, list[tuple[int, str]]] = defaultdict(list)
     current_hash: str | None = None
     current_ts: int | None = None
@@ -24,7 +24,7 @@ def _parse_git_log_dump(text: str) -> CommitIndex:
         if line.startswith("\x01"):
             parts = line[1:].split(" ", 1)
             if len(parts) != 2 or not parts[0].strip() or not parts[1].strip().isdigit():
-                logger.debug("Cabeçalho de commit inesperado ignorado: %r", line)
+                logger.debug("Ignoring unexpected commit header: %r", line)
                 continue
             commit_hash, ts = parts[0].strip(), parts[1].strip()
             current_hash, current_ts = commit_hash, int(ts)
@@ -40,15 +40,13 @@ def _parse_git_log_dump(text: str) -> CommitIndex:
 
 
 def build_commit_index(repo_path: str) -> CommitIndex:
-    """Roda ``git log --name-only`` uma vez sobre o repositório inteiro.
+    """Run ``git log --name-only`` once over the complete repository.
 
-    Retorna ``{arquivo: [(timestamp, commit_hash), ...]}`` ordenado por
-    tempo.
+    Return ``{file: [(timestamp, commit_hash), ...]}`` ordered by time.
     """
     logger.info(
-        "Construindo índice arquivo->commits a partir de %s "
-        "(passada única, pode levar alguns minutos dependendo do tamanho "
-        "do histórico)...",
+        "Building file-to-commit index from %s (one pass; this may take a few "
+        "minutes for large histories)...",
         repo_path,
     )
 
@@ -60,22 +58,22 @@ def build_commit_index(repo_path: str) -> CommitIndex:
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"git log falhou ao construir o índice: {result.stderr.strip()}"
+            f"git log failed while building the index: {result.stderr.strip()}"
         )
 
     index = _parse_git_log_dump(result.stdout)
-    logger.info("Índice construído: %d arquivos distintos.", len(index))
+    logger.info("Index built: %d distinct files.", len(index))
     return index
 
 
 def load_or_build_index(
     repo_path: str, cache_path: str, rebuild: bool = False
 ) -> CommitIndex:
-    """Carrega o índice de ``cache_path`` ou o constrói (e cacheia) do zero."""
+    """Load the index from ``cache_path`` or build and cache it."""
     cache_file = Path(cache_path)
 
     if not rebuild and cache_file.exists():
-        logger.info("Carregando índice do cache: %s", cache_path)
+        logger.info("Loading index from cache: %s", cache_path)
         try:
             with cache_file.open("rb") as f:
                 return pickle.load(f)
@@ -87,7 +85,7 @@ def load_or_build_index(
                 ImportError, 
                 TypeError) as exc:
             logger.warning(
-                "Cache de índice corrompido (%s); reconstruindo: %s",
+                "Corrupt index cache (%s); rebuilding: %s",
                 cache_path,
                 exc,
             )
@@ -99,7 +97,7 @@ def load_or_build_index(
     with tmp_file.open("wb") as f:
         pickle.dump(index, f)
     tmp_file.replace(cache_file)
-    logger.info("Índice salvo em cache: %s", cache_path)
+    logger.info("Index cached at: %s", cache_path)
 
     return index
 
@@ -107,10 +105,10 @@ def load_or_build_index(
 def find_candidates(
     index: CommitIndex, affected_files, since_ts: int, until_ts: int
 ) -> set[str]:
-    """Busca binária em memória, sem subprocess.
+    """Perform an in-memory binary search without subprocesses.
 
-    Retorna o conjunto de hashes de commit que tocam pelo menos um dos
-    ``affected_files``, dentro da janela de tempo ``[since_ts, until_ts]``.
+    Return commits that modify at least one ``affected_files`` entry within
+    the ``[since_ts, until_ts]`` time window.
     """
     candidates: set[str] = set()
     for file in affected_files:
