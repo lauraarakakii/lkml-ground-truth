@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import sys
 import argparse
 import csv
 import json
 from pathlib import Path
 from typing import Any
 
+csv.field_size_limit(sys.maxsize)
 
 def read_jsonl(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8") as source:
