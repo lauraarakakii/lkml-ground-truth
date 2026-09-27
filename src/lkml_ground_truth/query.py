@@ -1,30 +1,44 @@
 """SQL queries against the 'original' and 'enriched' Parquet datasets.
 
 Both datasets are laid out as Hive partitions (``list=<name>/...``), the same
-convention used by MailingListsHeritage. This module registers each root
-directory as a *partitioned* Parquet table with Apache Arrow DataFusion
-(``datafusion.SessionContext``) -- the same engine used by
-``analysis/src/mlh_analysis/sql_querier.py`` in MLH -- instead of eagerly
-reading every ``.parquet`` file with Polars.
+convention used by MailingListsHeritage. This module runs queries with
+Apache Arrow DataFusion (``datafusion.SessionContext``) -- the same engine
+used by ``analysis/src/mlh_analysis/sql_querier.py`` in MLH -- instead of
+eagerly reading every ``.parquet`` file with Polars.
 
-Registration only inspects Parquet footers/partition directory names, so it
-stays fast (and safe for ``DESCRIBE``) no matter how large the dataset is.
-Filtering by list becomes a ``WHERE list IN (...)`` view, which DataFusion
-turns into partition pruning: only the matching ``list=<name>`` directories
-are ever opened for actual row data. The final result is materialized to
-Polars (``.to_polars()``) only once, at the very end of a query, so
-``export_result``, ``_print_result`` and friends keep working unchanged.
+Only the ``list=<name>`` directories for the *requested* lists are ever
+registered, and registration only inspects Parquet footers, so it stays fast
+(and safe for ``DESCRIBE``) no matter how large the dataset is. Earlier this
+module registered the whole ``dataset_root``/``enriched_root`` as one
+Hive-partitioned table and filtered with ``WHERE list IN (...)``: that forced
+DataFusion to merge the schema of *every* list up front, so a single
+mismatched column anywhere in the dataset (e.g. an ``enriched`` run that
+wrote ``score`` as a string for one list) broke every query, even ones for an
+unrelated, perfectly fine list. Registering per-list avoids that -- a
+one-list query never looks at another list's files at all -- and when
+multiple lists *are* requested together (``--list all`` or a query joining
+several), any mismatched columns across them are reconciled the same way the
+previous Polars implementation's ``pl.concat(..., how="vertical_relaxed")``
+did: matching types are kept as-is, numeric types are widened, and anything
+else (e.g. a numeric/string clash) is coerced to a string.
+
+The final result is materialized to Polars (``.to_polars()``) only once, at
+the very end of a query, so ``export_result``, ``_print_result`` and friends
+keep working unchanged.
 """
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
 from collections.abc import Collection
 from pathlib import Path
 
 import polars as pl
-from datafusion import SessionContext
+import pyarrow as pa
+from datafusion import DataFrame as DFDataFrame
+from datafusion import SessionContext, column, lit
 
 try:
     import readline  # noqa: F401
@@ -42,9 +56,9 @@ LIST_COLUMN = "list"
 
 _KNOWN_TABLES = frozenset((ORIGINAL_TABLE, ENRICHED_TABLE))
 
-# Public view name -> hidden table name holding the *unfiltered*,
-# hive-partitioned dataset it is derived from.
-_RAW_TABLE_NAMES = {
+# Public view name -> prefix used for the private, per-list raw tables it is
+# built from (e.g. "_original_raw_0", "_original_raw_1", ...).
+_RAW_TABLE_PREFIXES = {
     ORIGINAL_TABLE: "_original_raw",
     ENRICHED_TABLE: "_enriched_raw",
 }
@@ -103,8 +117,8 @@ def _partition_names(root: Path) -> set[str]:
     """Names exposed by ``list=<name>`` subdirectories, read from disk only.
 
     This never opens a Parquet file: it is just a directory listing, used to
-    decide whether a root has any data for the requested lists before
-    registering it.
+    decide which of the requested lists actually have data before
+    registering anything.
     """
     if not root.is_dir():
         return set()
@@ -116,40 +130,99 @@ def _partition_names(root: Path) -> set[str]:
     return {name for name in names if name}
 
 
-def _quote_sql_literal(value: str) -> str:
-    return value.replace("'", "''")
+def _has_parquet_files(directory: Path) -> bool:
+    return any(directory.glob("*.parquet"))
 
 
-def _register_partitioned_root(ctx: SessionContext, raw_name: str, root: Path) -> bool:
-    """Register ``root`` as a Hive-partitioned Parquet table (lazy).
-
-    DataFusion only reads Parquet footers and partition directory names for
-    this -- never row data -- which is what makes ``DESCRIBE`` and schema
-    inspection instant regardless of dataset size. Returns ``False`` when the
-    directory does not exist so callers can log and skip it, mirroring the
-    previous "no data found" behavior.
-    """
-    if not root.is_dir():
-        return False
-    ctx.register_parquet(raw_name, str(root), table_partition_cols=[(LIST_COLUMN, "string")])
-    return True
-
-
-def _create_filtered_view(
-    ctx: SessionContext, view_name: str, raw_name: str, lists: list[str]
-) -> None:
-    """Create/replace ``view_name`` as ``raw_name`` restricted to ``lists``.
-
-    The ``WHERE list IN (...)`` predicate is pushed down by DataFusion as
-    partition pruning: only the ``list=<name>`` directories that match are
-    ever opened for row data, equivalent to what the old code did by loading
-    only the requested lists -- but without materializing anything eagerly.
-    """
-    values = ", ".join(f"'{_quote_sql_literal(name)}'" for name in lists)
-    ctx.sql(
-        f"CREATE OR REPLACE VIEW {view_name} AS "
-        f"SELECT * FROM {raw_name} WHERE {LIST_COLUMN} IN ({values})"
+def _is_string_like(data_type: pa.DataType) -> bool:
+    return (
+        pa.types.is_string(data_type)
+        or pa.types.is_large_string(data_type)
+        or pa.types.is_string_view(data_type)
     )
+
+
+def _unify_type(types: list[pa.DataType]) -> pa.DataType:
+    """Pick a common Arrow type for the same column seen across lists.
+
+    Mirrors the leniency of Polars' ``pl.concat(..., how="vertical_relaxed")``,
+    which the previous implementation relied on: identical types are kept,
+    null-typed (all-missing) columns defer to whatever concrete type shows up
+    elsewhere, mixed integer/float columns widen to float64, and anything
+    else that cannot be reconciled (e.g. a numeric column next to a string
+    one) falls back to a string, which every scalar type can be cast to.
+    """
+    concrete = [t for t in types if not pa.types.is_null(t)]
+    if not concrete:
+        return pa.null()
+    first = concrete[0]
+    if all(t.equals(first) for t in concrete):
+        return first
+    if any(_is_string_like(t) for t in concrete):
+        return pa.string()
+    if all(pa.types.is_integer(t) or pa.types.is_floating(t) for t in concrete):
+        return pa.float64() if any(pa.types.is_floating(t) for t in concrete) else pa.int64()
+    return pa.string()
+
+
+def _register_list_tables(
+    ctx: SessionContext, raw_prefix: str, root: Path, lists: list[str]
+) -> list[tuple[str, str, pa.Schema]]:
+    """Register one raw table per ``list=<name>`` directory that has data.
+
+    Only the requested ``lists`` are touched -- never the rest of ``root`` --
+    so a query for one list can never be broken by another list's data, and
+    registration stays metadata-only (Parquet footers, no row data).
+    Returns ``(raw_table_name, list_name, schema)`` for each list found.
+    """
+    entries: list[tuple[str, str, pa.Schema]] = []
+    for name in lists:
+        partition_dir = root / f"{LIST_COLUMN}={name}"
+        if not partition_dir.is_dir() or not _has_parquet_files(partition_dir):
+            continue
+        raw_name = f"{raw_prefix}_{len(entries)}"
+        ctx.register_parquet(raw_name, str(partition_dir))
+        entries.append((raw_name, name, ctx.table(raw_name).schema()))
+    return entries
+
+
+def _build_union_view(
+    ctx: SessionContext, view_name: str, entries: list[tuple[str, str, pa.Schema]]
+) -> None:
+    """Create ``view_name`` as the union of each list's raw table.
+
+    Column order follows first appearance across ``entries``; each list's
+    columns are cast to the unified type computed by ``_unify_type``, and a
+    typed ``NULL`` fills in columns a given list doesn't have. A literal
+    ``list`` column is added, exactly as the old ``pl.lit(name)`` did.
+    """
+    column_order: list[str] = []
+    seen: set[str] = set()
+    for _, _, schema in entries:
+        for field in schema:
+            if field.name not in seen:
+                seen.add(field.name)
+                column_order.append(field.name)
+
+    target_types = {
+        col: _unify_type(
+            [schema.field(col).type for _, _, schema in entries if col in schema.names]
+        )
+        for col in column_order
+    }
+
+    frames: list[DFDataFrame] = []
+    for raw_name, name, schema in entries:
+        exprs = []
+        for col in column_order:
+            target = target_types[col]
+            expr = column(col).cast(target) if col in schema.names else lit(None).cast(target)
+            exprs.append(expr.alias(col))
+        exprs.append(lit(name).alias(LIST_COLUMN))
+        frames.append(ctx.table(raw_name).select(*exprs))
+
+    unioned = functools.reduce(lambda a, b: a.union(b), frames)
+    ctx.register_view(view_name, unioned)
 
 
 class QueryContext:
@@ -192,10 +265,9 @@ def build_context(
 
     if ORIGINAL_TABLE in requested_tables:
         root = Path(config.paths.dataset_root)
-        raw_name = _RAW_TABLE_NAMES[ORIGINAL_TABLE]
-        matched = lists and (set(lists) & _partition_names(root))
-        if matched and _register_partitioned_root(ctx, raw_name, root):
-            _create_filtered_view(ctx, ORIGINAL_TABLE, raw_name, sorted(matched))
+        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[ORIGINAL_TABLE], root, lists)
+        if entries:
+            _build_union_view(ctx, ORIGINAL_TABLE, entries)
             available_tables.add(ORIGINAL_TABLE)
         else:
             logger.warning(
@@ -205,10 +277,9 @@ def build_context(
             )
     if ENRICHED_TABLE in requested_tables:
         root = Path(config.paths.enriched_root)
-        raw_name = _RAW_TABLE_NAMES[ENRICHED_TABLE]
-        matched = lists and (set(lists) & _partition_names(root))
-        if matched and _register_partitioned_root(ctx, raw_name, root):
-            _create_filtered_view(ctx, ENRICHED_TABLE, raw_name, sorted(matched))
+        entries = _register_list_tables(ctx, _RAW_TABLE_PREFIXES[ENRICHED_TABLE], root, lists)
+        if entries:
+            _build_union_view(ctx, ENRICHED_TABLE, entries)
             available_tables.add(ENRICHED_TABLE)
         else:
             logger.warning(
