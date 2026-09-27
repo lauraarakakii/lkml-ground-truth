@@ -12,6 +12,9 @@ dist/
 htmlcov/
 .coverage
 
+# Documentação local sobre o projeto
+docs/
+
 # Saídas do pipeline e caches locais
 output/
 commit_index_cache.pickle

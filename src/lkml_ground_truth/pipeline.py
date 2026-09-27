@@ -6,19 +6,18 @@ comparison lives in :mod:`lkml_ground_truth.engine`.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import Pool
 from pathlib import Path
 
-import dataclasses
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import polars as pl
 
 from .config import Config
 from .dataset_io import read_parquet_safe
 from .engine import init_worker_globals, process_row
 from .repo_setup import ensure_repo
-
 
 logger = logging.getLogger(__name__)
 _RESULT_SCHEMA = {

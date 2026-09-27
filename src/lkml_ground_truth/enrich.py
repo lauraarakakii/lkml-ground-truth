@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging 
+import logging
 from pathlib import Path
 
 import polars as pl
 
-from .config import Config 
-from .dataset_io import read_parquet_safe
+from .config import Config
 
 logger = logging.getLogger(__name__)
 

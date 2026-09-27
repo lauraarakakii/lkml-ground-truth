@@ -3,8 +3,8 @@ CONFIG ?= config.toml
 CONTAINER := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 IMAGE := lkml-ground-truth
 
-# Roda o container com o UID/GID de quem invocou o make (nunca root).
-# Podman rootless: keep-id mapeia o seu usuário direto. Docker: --user.
+# Run containers as the invoking user, never as root.
+# Rootless Podman uses keep-id; Docker uses --user.
 ifneq ($(CONTAINER),)
 ifeq ($(shell $(CONTAINER) --version 2>/dev/null | grep -ci podman),0)
 USER_FLAGS := --user $(shell id -u):$(shell id -g)
@@ -17,13 +17,10 @@ RUN := $(CONTAINER) run --rm $(USER_FLAGS)
 REPO_VOLUME ?= $(CURDIR)/resources/linux/repo
 DATASET_VOLUME ?= $(CURDIR)/resources/dataset
 
-SQL ?=
 LIST ?=
-OUTPUT ?=
-FORMAT ?=
-QUERY_ARGS := $(if $(LIST),--list $(LIST)) \
-              $(if $(OUTPUT),--output $(OUTPUT)) \
-              $(if $(FORMAT),--format $(FORMAT))
+ANALYSIS ?= dataset_coverage
+RESULTS_DIR ?= output/analysis
+ANALYSIS_DIR := src/lkml_ground_truth/analysis
 
 .PHONY: all
 all: run
@@ -31,11 +28,11 @@ all: run
 .PHONY: config
 config:
 	@if [ ! -f "$(CONFIG)" ]; then \
-		echo "==> Copiando example_config.toml -> $(CONFIG)"; \
+		echo "==> Copying example_config.toml -> $(CONFIG)"; \
 		cp example_config.toml $(CONFIG); \
-		echo "==> Edite $(CONFIG) com os caminhos do seu ambiente antes de rodar."; \
+		echo "==> Edit $(CONFIG) with paths for your environment before running."; \
 	else \
-		echo "==> $(CONFIG) já existe, nada a fazer."; \
+		echo "==> $(CONFIG) already exists; nothing to do."; \
 	fi
 
 # Alvo interno: garante runtime, imagem e diretórios de volume.
@@ -44,7 +41,7 @@ config:
 .PHONY: _ensure-image
 _ensure-image:
 	@if [ -z "$(CONTAINER)" ]; then \
-		echo "==> Nenhum runtime de container (docker/podman) encontrado no PATH."; \
+		echo "==> No container runtime (docker/podman) found in PATH."; \
 		exit 1; \
 	fi; \
 	mkdir -p "$(REPO_VOLUME)" "$(DATASET_VOLUME)"; \
@@ -145,27 +142,14 @@ enrich:
 			--config $(CONFIG) enrich; \
 	fi
 
-.PHONY: query
-query:
-	@if [ ! -f "$(CONFIG)" ]; then \
-		echo "==> Error: $(CONFIG) não encontrado. Rode 'make config' primeiro."; \
-		exit 1; \
-	fi
-	@if command -v uv >/dev/null 2>&1; then \
-		echo "==> Found uv toolchain, running natively..."; \
-		uv run lkml-ground-truth --config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \
-	else \
-		echo "==> uv toolchain not found, running with $(CONTAINER) (Image: $(IMAGE))..."; \
-		$(MAKE) _ensure-image || exit 1; \
-		$(RUN) -it \
-			-v $(CURDIR):/app \
-			-v $(DATASET_VOLUME):/app/resources/dataset \
-			$(IMAGE) \
-			--config $(CONFIG) query $(if $(SQL),"$(SQL)") $(QUERY_ARGS); \
-	fi
+.PHONY: analysis
+analysis:
+	@$(MAKE) -C $(ANALYSIS_DIR) run REPO_ROOT="$(CURDIR)" CONFIG="$(abspath $(CONFIG))" \
+		ANALYSIS="$(ANALYSIS)" LIST="$(if $(LIST),$(LIST),all)" \
+		RESULTS_DIR="$(abspath $(RESULTS_DIR))"
 
 .PHONY: clean
 clean:
-	@echo "==> Limpando artefatos locais..."
+	@echo "==> Cleaning local artifacts..."
 	@rm -rf .venv .cache .nox .ruff_cache .pytest_cache htmlcov .coverage
 	@rm -rf __pycache__ **/__pycache__

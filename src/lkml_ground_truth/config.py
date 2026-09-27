@@ -6,9 +6,9 @@ parallelism, and comparison-engine thresholds.
 
 from __future__ import annotations
 
+import glob
 import logging
 import tomllib
-import glob
 from dataclasses import dataclass
 from multiprocessing import cpu_count
 from pathlib import Path

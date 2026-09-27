@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-from email.policy import default
 import logging
 
+from .analysis.query import run as run_query_command
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .enrich import run as run_enrich
 from .pipeline import run as run_pipeline
-from .query import run as run_query_command
 from .repo_setup import ensure_repo
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
