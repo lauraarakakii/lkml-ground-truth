@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _RESULT_SCHEMA = {
     "message_id": pl.Utf8,
     "best_commit": pl.Utf8,
+    "commit_date": pl.Utf8,
     "score": pl.Float64,
     "is_match": pl.Boolean,
     "is_confident_match": pl.Boolean,

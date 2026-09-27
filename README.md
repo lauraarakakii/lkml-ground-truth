@@ -59,7 +59,8 @@ make run REPO_VOLUME=/data/linux DATASET_VOLUME=/data/mlh/dataset
 
 `example_config.toml` documents the configuration fields. `list_name` accepts a
 single partition name or `all`. Output rows contain `message_id`, `best_commit`,
-`score`, `is_match`, `is_confident_match`, and an optional `error`.
+`commit_date` (the Git committer timestamp, in ISO 8601), `score`,
+`is_match`, `is_confident_match`, and an optional `error`.
 
 ## Development
 

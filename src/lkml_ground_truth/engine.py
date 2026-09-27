@@ -137,6 +137,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
         return {
             "message_id": row.get("message_id"),
             "best_commit": None,
+            "commit_date": None,
             "score": None,
             "is_match": False,
             "is_confident_match": False,
@@ -145,6 +146,7 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
 
     best_score: float | None = None
     best_hash: str | None = None
+    best_commit_date: str | None = None
 
     for commit_hash in candidates:
         try:
@@ -166,10 +168,12 @@ def process_row(row: dict[str, Any]) -> dict[str, Any] | None:
             or (score == best_score and (best_hash is None or commit_hash < best_hash))
         ):
             best_score, best_hash = score, commit_hash
+            best_commit_date = commit.committer.date.isoformat()
 
     return {
         "message_id": row.get("message_id"),
         "best_commit": best_hash,
+        "commit_date": best_commit_date,
         "score": best_score,
         "is_match": best_score is not None and best_score >= _thresholds.interactive,
         "is_confident_match": best_score is not None and best_score >= _thresholds.autoaccept,
